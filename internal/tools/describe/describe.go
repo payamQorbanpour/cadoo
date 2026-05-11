@@ -8,6 +8,14 @@ import (
 	"github.com/payamqorbanpour/cadoo/internal/tools"
 )
 
+// Inline icon markdown rendered next to each subsection header. Differentiates
+// the analyze/risk callouts at a glance without forcing readers to expand
+// every collapsible block.
+const (
+	analyzeIcon = `<img src="https://raw.githubusercontent.com/payamqorbanpour/cadoo/main/docs/assets/Magnifier.png" height="20" align="absmiddle" alt="Analyze">`
+	riskIcon    = `<img src="https://raw.githubusercontent.com/payamqorbanpour/cadoo/main/docs/assets/Risk.png" height="20" align="absmiddle" alt="Risks">`
+)
+
 const systemPrompt = `You are Cadoo. Propose a concise, reviewer-friendly description for this pull request.
 
 Respond with ONLY a JSON object:
@@ -71,7 +79,8 @@ func buildSection(o Output) string {
 		b.WriteString("\n\n")
 	}
 	if len(o.Changes) > 0 {
-		b.WriteString("**Changes**\n\n")
+		b.WriteString(analyzeIcon)
+		b.WriteString(" **Changes**\n\n")
 		for _, c := range o.Changes {
 			c = strings.TrimSpace(c)
 			if c == "" {
@@ -84,7 +93,8 @@ func buildSection(o Output) string {
 		b.WriteString("\n")
 	}
 	if r := strings.TrimSpace(o.Risks); r != "" {
-		b.WriteString("**Risks:** ")
+		b.WriteString(riskIcon)
+		b.WriteString(" **Risks:** ")
 		b.WriteString(r)
 		b.WriteString("\n")
 	}

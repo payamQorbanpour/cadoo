@@ -17,6 +17,17 @@ const (
 	wrapperEnd     = "<!-- cadoo:wrapper:end -->"
 	prSectionBegin = "<!-- cadoo:pr-body:begin -->"
 	prSectionEnd   = "<!-- cadoo:pr-body:end -->"
+
+	// brandAvatar is the inline avatar markdown rendered next to the
+	// "Cadoo" name in the consolidated comment header. Served from
+	// raw.githubusercontent.com so it loads on any host that renders
+	// markdown (GitHub, GHES, GitLab, self-hosted dashboards).
+	brandAvatar = `<img src="https://raw.githubusercontent.com/payamqorbanpour/cadoo/main/docs/assets/Profile.png" height="28" align="absmiddle" alt="Cadoo">`
+
+	// descriptionAvatar is the icon used on the "Cadoo description" header
+	// injected into PR/MR bodies. Differentiating from the brand mark makes
+	// the description block visually distinct from the consolidated review.
+	descriptionAvatar = `<img src="https://raw.githubusercontent.com/payamqorbanpour/cadoo/main/docs/assets/Description.png" height="28" align="absmiddle" alt="Description">`
 )
 
 // sectionTitle maps tool names to the display label shown in the
@@ -36,16 +47,17 @@ var sectionTitle = map[string]string{
 
 // sectionEmoji prefixes each section's <summary> so the consolidated comment
 // is easy to scan at a glance. Mirrors the visual cues Qodo Merge uses.
+// Tools without a dedicated brand asset fall back to a unicode emoji.
 var sectionEmoji = map[string]string{
 	"review":      "🔍",
 	"deep_review": "🔬",
-	"improve":     "💡",
+	"improve":     `<img src="https://raw.githubusercontent.com/payamqorbanpour/cadoo/main/docs/assets/Improvement.png" height="20" align="absmiddle" alt="Improve">`,
 	"changelog":   "📝",
 	"add_tests":   "🧪",
 	"add_docs":    "📚",
 	"plan":        "🗺",
 	"ask":         "❓",
-	"check":       "✅",
+	"check":       `<img src="https://raw.githubusercontent.com/payamqorbanpour/cadoo/main/docs/assets/Flash.png" height="20" align="absmiddle" alt="Check">`,
 }
 
 // renderConsolidated builds the single comment body that wraps every tool's
@@ -66,7 +78,7 @@ func renderConsolidated(sections []findings.Section) string {
 
 	var b strings.Builder
 	b.WriteString(wrapperBegin)
-	b.WriteString("\n## Cadoo\n\n")
+	b.WriteString("\n## " + brandAvatar + " Cadoo\n\n")
 	for _, s := range sections {
 		b.WriteString(renderSection(s))
 		b.WriteString("\n")
@@ -138,7 +150,7 @@ func joinBody(userText, section, tail string) string {
 		b.WriteString("\n\n")
 	}
 	b.WriteString(prSectionBegin)
-	b.WriteString("\n## Cadoo description\n\n")
+	b.WriteString("\n## " + descriptionAvatar + " Cadoo description\n\n")
 	b.WriteString(section)
 	b.WriteString("\n")
 	b.WriteString(prSectionEnd)
