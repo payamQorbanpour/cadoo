@@ -24,7 +24,7 @@ const (
 	// markdown (GitHub, GHES, GitLab, self-hosted dashboards).
 	brandAvatar = `<img src="https://raw.githubusercontent.com/payamqorbanpour/cadoo/main/docs/assets/Profile.png" height="28" align="absmiddle" alt="Cadoo">`
 
-	// descriptionAvatar is the icon used on the "Cadoo description" header
+	// descriptionAvatar is the icon used on the "Cadoo" header
 	// injected into PR/MR bodies. Differentiating from the brand mark makes
 	// the description block visually distinct from the consolidated review.
 	descriptionAvatar = `<img src="https://raw.githubusercontent.com/payamqorbanpour/cadoo/main/docs/assets/Description.png" height="28" align="absmiddle" alt="Description">`
@@ -34,6 +34,7 @@ const (
 // consolidated comment's section header. Tools without an explicit label
 // fall back to the tool name title-cased.
 var sectionTitle = map[string]string{
+	"describe":    "Description",
 	"review":      "Review",
 	"deep_review": "Deep review",
 	"improve":     "Suggested improvements",
@@ -49,7 +50,8 @@ var sectionTitle = map[string]string{
 // is easy to scan at a glance. Mirrors the visual cues Qodo Merge uses.
 // Tools without a dedicated brand asset fall back to a unicode emoji.
 var sectionEmoji = map[string]string{
-	"review":      "🔍",
+	"describe":    `<img src="https://raw.githubusercontent.com/payamqorbanpour/cadoo/main/docs/assets/Description.png" height="20" align="absmiddle" alt="Description">`,
+	"review":      `<img src="https://raw.githubusercontent.com/payamqorbanpour/cadoo/main/docs/assets/Magnifier.png" height="20" align="absmiddle" alt="Review">`,
 	"deep_review": "🔬",
 	"improve":     `<img src="https://raw.githubusercontent.com/payamqorbanpour/cadoo/main/docs/assets/Improvement.png" height="20" align="absmiddle" alt="Improve">`,
 	"changelog":   "📝",
@@ -150,7 +152,7 @@ func joinBody(userText, section, tail string) string {
 		b.WriteString("\n\n")
 	}
 	b.WriteString(prSectionBegin)
-	b.WriteString("\n## " + descriptionAvatar + " Cadoo description\n\n")
+	b.WriteString("\n## " + descriptionAvatar + " Cadoo\n\n")
 	b.WriteString(section)
 	b.WriteString("\n")
 	b.WriteString(prSectionEnd)

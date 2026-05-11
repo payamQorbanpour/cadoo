@@ -25,23 +25,22 @@ Cadoo posts inline review comments, generates PR descriptions, suggests improvem
 
 ## Sample output
 
-A typical PR triggers three things: an edited description, one consolidated review comment, and inline suggestions anchored to the diff. Everything is idempotent across resyncs.
+A typical PR triggers three things: an edited description, one consolidated Cadoo comment, and inline suggestions anchored to the diff. Everything is idempotent across resyncs.
 
 ### Edited PR description
 
-The user's text stays on top; Cadoo's section is appended between idempotent markers, so re-running `/describe` replaces it cleanly instead of stacking new copies.
+The user's text stays on top; Cadoo's section is appended between idempotent markers (`<!-- cadoo:pr-body:begin -->` … `<!-- cadoo:pr-body:end -->`), so re-running `/describe` replaces it cleanly instead of stacking new copies.
 
-```markdown
+<blockquote>
+
 This PR migrates the `/v2/users` endpoint to the new auth middleware.
 Closes #842.
 
-<!-- cadoo:pr-body:begin -->
-## Cadoo description
+<img src="docs/assets/Description.png" height="28" align="absmiddle" alt="Cadoo"> **Cadoo**
 
 **Title:** Migrate /v2/users to scoped-token middleware
 
-Replaces the legacy bearer-token check with the new `scopedauth` middleware
-on the /v2/users endpoint to align with the org-wide auth rotation.
+Replaces the legacy bearer-token check with the new `scopedauth` middleware on the /v2/users endpoint to align with the org-wide auth rotation.
 
 **Type:** Enhancement, Tests
 
@@ -52,7 +51,11 @@ on the /v2/users endpoint to align with the org-wide auth rotation.
 - Add table-driven tests covering 401 / 403 / scope-mismatch paths
 - Update `docs/auth.md` with the new scope name
 
-<details><summary><strong>File Walkthrough</strong></summary>
+<img src="docs/assets/Risk.png" height="20" align="absmiddle" alt="Risks"> **Risks**
+
+- Callers still on legacy tokens will start receiving 403 — feature-flagged behind `auth.scoped_v2`.
+
+<details><summary><img src="docs/assets/Magnifier.png" height="20" align="absmiddle" alt="Walkthrough"> <strong>File Walkthrough</strong></summary>
 
 | | Relevant files |
 |---|---|
@@ -62,46 +65,58 @@ on the /v2/users endpoint to align with the org-wide auth rotation.
 
 </details>
 
-**Risks:** Callers still on legacy tokens will start receiving 403 — feature-flagged behind `auth.scoped_v2`.
-<!-- cadoo:pr-body:end -->
-```
+</blockquote>
 
-### Consolidated review comment
+### Consolidated Cadoo comment
 
-One top-level comment per PR — never multiple. Each tool (`/review`, `/improve`, `/changelog`, …) appears as a collapsible section, and the comment is edited in place on every resync.
+One top-level comment per PR — never multiple. Each tool (`/describe`, `/improve`, `/changelog`, …) appears as a collapsible section, and the comment is edited in place on every resync. `/review` no longer posts a summary section — its signal lives in the inline review threads and the `cadoo/review` check run.
 
-```markdown
-## Cadoo
+<blockquote>
 
-<details><summary>🔍 <strong>Review</strong></summary>
+<img src="docs/assets/Description.png" height="28" align="absmiddle" alt="Cadoo"> **Cadoo**
 
-This PR cleanly swaps the auth middleware. The new scope check is well-tested;
-the only concern is that the rollback path silently drops legacy tokens.
+<details open><summary><img src="docs/assets/Description.png" height="20" align="absmiddle" alt="Description"> <strong>Description</strong></summary>
 
-| | |
+**Title:** Migrate /v2/users to scoped-token middleware
+
+Replaces the legacy bearer-token check with the new `scopedauth` middleware on the /v2/users endpoint to align with the org-wide auth rotation.
+
+**Type:** Enhancement, Tests
+
+**Changes**
+
+- Swap `authn.Bearer` for `scopedauth.Require("users:read")` on the route
+- Drop the now-unused `legacyTokenFromCtx` helper
+- Add table-driven tests covering 401 / 403 / scope-mismatch paths
+- Update `docs/auth.md` with the new scope name
+
+<img src="docs/assets/Risk.png" height="20" align="absmiddle" alt="Risks"> **Risks**
+
+- Callers still on legacy tokens will start receiving 403 — feature-flagged behind `auth.scoped_v2`.
+
+<details><summary><img src="docs/assets/Magnifier.png" height="20" align="absmiddle" alt="Walkthrough"> <strong>File Walkthrough</strong></summary>
+
+| | Relevant files |
 |---|---|
-| ⏱ Effort | ●●●○○ |
-| 📄 Files | 7 (~9k tokens) |
-| 🔎 Findings | 2 posted (1 blocking) |
-
-<details><summary>⚡ Focus areas</summary>
-
-- **BLOCK** `internal/auth/scoped.go:84` — Token rotation drops in-flight requests
-- **WARN** `internal/auth/scoped.go:142` — Scope check missing audit log entry
+| **Enhancement** | <details><summary>2 files</summary> `routes/users.go` — Swap to scopedauth middleware (+18/-9)<br>`internal/authn/legacy.go` — Drop unused helper (+0/-24) </details> |
+| **Tests** | <details><summary>1 files</summary> `routes/users_test.go` — Cover 401/403/scope-mismatch (+62/-3) </details> |
+| **Documentation** | <details><summary>1 files</summary> `docs/auth.md` — Document new scope name (+5/-1) </details> |
 
 </details>
 
 </details>
 
-<details><summary>💡 <strong>Suggested improvements</strong></summary>
+<details open><summary><img src="docs/assets/Improvement.png" height="20" align="absmiddle" alt="Improve"> <strong>Suggested improvements</strong></summary>
 
 3 inline suggestion(s) posted:
+
 - `internal/auth/scoped.go:42`
 - `internal/auth/scoped.go:91`
 - `docs/auth.md:18`
 
 </details>
-```
+
+</blockquote>
 
 ### Inline suggestion
 

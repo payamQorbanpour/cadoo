@@ -43,8 +43,8 @@ func TestReviewToolBuildsExpectedResult(t *testing.T) {
 	if len(res.InlineComments) != 2 {
 		t.Errorf("expected 2 inlines, got %d", len(res.InlineComments))
 	}
-	if res.Summary == "" {
-		t.Error("summary empty")
+	if res.Summary != "" {
+		t.Errorf("expected no top-level summary comment from /review, got %q", res.Summary)
 	}
 }
 
@@ -69,7 +69,7 @@ func TestReviewToolFiltersBelowThreshold(t *testing.T) {
 	}
 }
 
-func TestReviewToolCleanRunPostsStatsSummary(t *testing.T) {
+func TestReviewToolCleanRunEmitsNoSummary(t *testing.T) {
 	in := tools.Input{
 		PR: &vcs.PullRequest{},
 		Packed: contextengine.Compressed{
@@ -87,13 +87,8 @@ func TestReviewToolCleanRunPostsStatsSummary(t *testing.T) {
 	if len(res.InlineComments) != 0 {
 		t.Errorf("expected 0 inlines on clean run, got %d", len(res.InlineComments))
 	}
-	if res.Summary == "" {
-		t.Fatal("expected stats summary on clean run with StatsOnClean default, got empty")
-	}
-	for _, want := range []string{"No findings", "Files", "2 (~1k tokens)", "claude-sonnet-4-6"} {
-		if !strings.Contains(res.Summary, want) {
-			t.Errorf("summary missing %q:\n%s", want, res.Summary)
-		}
+	if res.Summary != "" {
+		t.Errorf("expected no top-level summary on clean run, got %q", res.Summary)
 	}
 	if res.CheckRun == nil || res.CheckRun.Status != vcs.CheckSucceeded {
 		t.Errorf("expected CheckSucceeded, got %+v", res.CheckRun)

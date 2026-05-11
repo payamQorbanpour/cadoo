@@ -23,7 +23,7 @@ func TestRenderWalkthroughBucketsByLabel(t *testing.T) {
 		{Path: ".github/workflows/ci.yaml", Label: "Configuration changes", Description: "Bump go to 1.23"},
 		{Path: "README.md", Label: "documentation", Description: "Document new env vars"},
 	}
-	got := renderWalkthrough(items, files)
+	got := renderWalkthrough(items, files, true)
 	if got == "" {
 		t.Fatal("expected non-empty walkthrough")
 	}
@@ -72,7 +72,7 @@ func TestRenderWalkthroughBucketsByLabel(t *testing.T) {
 }
 
 func TestRenderWalkthroughEmptyWhenNoFiles(t *testing.T) {
-	if got := renderWalkthrough(nil, nil); got != "" {
+	if got := renderWalkthrough(nil, nil, true); got != "" {
 		t.Errorf("expected empty, got %q", got)
 	}
 }
@@ -87,7 +87,7 @@ func TestRenderWalkthroughIgnoresPhantomPaths(t *testing.T) {
 		{Path: "hallucinated.go", Label: "Enhancement", Description: "Not real"},
 		{Path: "real.go", Label: "Enhancement", Description: "Real change"},
 	}
-	got := renderWalkthrough(items, files)
+	got := renderWalkthrough(items, files, true)
 	if strings.Contains(got, "hallucinated.go") {
 		t.Errorf("phantom path leaked into output:\n%s", got)
 	}
@@ -96,7 +96,7 @@ func TestRenderWalkthroughIgnoresPhantomPaths(t *testing.T) {
 	}
 }
 
-func TestBuildSectionAppendsWalkthroughBetweenChangesAndRisks(t *testing.T) {
+func TestBuildSectionPutsWalkthroughLast(t *testing.T) {
 	out := Output{
 		Title:   "Refactor KB service",
 		Intent:  "Tighten the EditKnowledgeBase path.",
@@ -108,16 +108,43 @@ func TestBuildSectionAppendsWalkthroughBetweenChangesAndRisks(t *testing.T) {
 		},
 	}
 	files := []vcs.FileChange{{Path: "kb.go", Additions: 5, Deletions: 1}}
-	got := buildSection(out, files)
+	got := buildSection(out, files, true)
 
 	changesIdx := strings.Index(got, "**Changes**")
-	walkIdx := strings.Index(got, "File Walkthrough")
 	risksIdx := strings.Index(got, "**Risks**")
-	if changesIdx < 0 || walkIdx < 0 || risksIdx < 0 {
+	walkIdx := strings.Index(got, "File Walkthrough")
+	if changesIdx < 0 || risksIdx < 0 || walkIdx < 0 {
 		t.Fatalf("missing sections:\n%s", got)
 	}
-	if changesIdx >= walkIdx || walkIdx >= risksIdx {
-		t.Errorf("expected order Changes → Walkthrough → Risks, got indices %d/%d/%d", changesIdx, walkIdx, risksIdx)
+	if changesIdx >= risksIdx || risksIdx >= walkIdx {
+		t.Errorf("expected order Changes → Risks → Walkthrough, got indices %d/%d/%d", changesIdx, risksIdx, walkIdx)
+	}
+	if !strings.Contains(got, risksIcon) {
+		t.Errorf("expected Risks header to include the risks icon:\n%s", got)
+	}
+}
+
+func TestBuildSectionWithoutImageStripsWalkthroughIcon(t *testing.T) {
+	out := Output{
+		Title:   "x",
+		Changes: []string{"c"},
+		Walkthrough: []WalkthroughFile{
+			{Path: "a.go", Label: "Enhancement", Description: "d"},
+		},
+	}
+	files := []vcs.FileChange{{Path: "a.go"}}
+
+	withImg := buildSection(out, files, true)
+	withoutImg := buildSection(out, files, false)
+
+	if !strings.Contains(withImg, filesIcon) {
+		t.Errorf("expected PR-body variant to keep walkthrough image")
+	}
+	if strings.Contains(withoutImg, "<img") {
+		t.Errorf("comment variant must not contain <img>:\n%s", withoutImg)
+	}
+	if !strings.Contains(withoutImg, "<strong>File Walkthrough</strong>") {
+		t.Errorf("comment variant must keep walkthrough table:\n%s", withoutImg)
 	}
 }
 

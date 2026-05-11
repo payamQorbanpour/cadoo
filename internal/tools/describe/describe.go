@@ -12,7 +12,10 @@ import (
 )
 
 // filesIcon is rendered next to the File Walkthrough header.
-const filesIcon = `<img src="https://raw.githubusercontent.com/payamqorbanpour/cadoo/main/docs/assets/Files.png" height="20" align="absmiddle" alt="Walkthrough">`
+const filesIcon = `<img src="https://raw.githubusercontent.com/payamqorbanpour/cadoo/main/docs/assets/Magnifier.png" height="20" align="absmiddle" alt="Walkthrough">`
+
+// risksIcon is rendered next to the Risks header.
+const risksIcon = `<img src="https://raw.githubusercontent.com/payamqorbanpour/cadoo/main/docs/assets/Risk.png" height="20" align="absmiddle" alt="Risks">`
 
 // labelEnhancement and siblings are the fixed walkthrough categories. Order
 // here is the render order in the table. "Additional files" is the catch-all
@@ -96,11 +99,15 @@ func (Tool) Run(ctx context.Context, in tools.Input) (*tools.Result, error) {
 	if err := tools.CallJSON(ctx, in.LLM, in.Model, sys, user, &out); err != nil {
 		return nil, err
 	}
-	section := buildSection(out, in.Files)
-	return &tools.Result{EditPRBody: &section}, nil
+	body := buildSection(out, in.Files, true)
+	comment := buildSection(out, in.Files, false)
+	return &tools.Result{
+		EditPRBody: &body,
+		Summary:    comment,
+	}, nil
 }
 
-func buildSection(o Output, files []vcs.FileChange) string {
+func buildSection(o Output, files []vcs.FileChange, withImage bool) string {
 	var b strings.Builder
 	if o.Title != "" {
 		b.WriteString("**Title:** ")
@@ -129,17 +136,18 @@ func buildSection(o Output, files []vcs.FileChange) string {
 		}
 		b.WriteString("\n")
 	}
-	if walk := renderWalkthrough(o.Walkthrough, files); walk != "" {
-		b.WriteString(walk)
-		b.WriteString("\n")
-	}
 	if risks := nonEmpty(o.Risks); len(risks) > 0 {
-		b.WriteString("**Risks**\n\n")
+		b.WriteString(risksIcon)
+		b.WriteString(" **Risks**\n\n")
 		for _, r := range risks {
 			b.WriteString("- ")
 			b.WriteString(r)
 			b.WriteString("\n")
 		}
+		b.WriteString("\n")
+	}
+	if walk := renderWalkthrough(o.Walkthrough, files, withImage); walk != "" {
+		b.WriteString(walk)
 		b.WriteString("\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
@@ -150,7 +158,7 @@ func buildSection(o Output, files []vcs.FileChange) string {
 // names, descriptions, and +adds/-deletes counts. Files the LLM did not
 // label (or labelled with something we don't recognise) fall into
 // "Additional files".
-func renderWalkthrough(items []WalkthroughFile, files []vcs.FileChange) string {
+func renderWalkthrough(items []WalkthroughFile, files []vcs.FileChange, withImage bool) string {
 	if len(files) == 0 {
 		return ""
 	}
@@ -189,8 +197,11 @@ func renderWalkthrough(items []WalkthroughFile, files []vcs.FileChange) string {
 
 	var b strings.Builder
 	b.WriteString("<details><summary>")
-	b.WriteString(filesIcon)
-	b.WriteString(" <strong>File Walkthrough</strong></summary>\n\n")
+	if withImage {
+		b.WriteString(filesIcon)
+		b.WriteString(" ")
+	}
+	b.WriteString("<strong>File Walkthrough</strong></summary>\n\n")
 	b.WriteString("<table>\n<thead><tr><th></th><th>Relevant files</th></tr></thead>\n<tbody>\n")
 	for _, label := range walkthroughOrder {
 		rows := buckets[label]
