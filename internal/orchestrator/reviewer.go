@@ -183,11 +183,6 @@ func (d *Dispatcher) Run(ctx context.Context, job ToolJob) (retErr error) {
 	})
 
 	model := d.modelName(cfg)
-	if model == "" {
-		err := fmt.Errorf("no LLM model configured: set `model:` in .cadoo.yaml or CADOO_DEFAULT_MODEL")
-		d.failCheck(ctx, provider, pr, err)
-		return err
-	}
 	in := tools.Input{
 		PR:     pr,
 		Files:  files,
@@ -420,12 +415,11 @@ func isMissingFile(err error) bool {
 	return strings.Contains(msg, "404") || strings.Contains(msg, "not found")
 }
 
-// modelName resolves which LLM model this dispatch should use. We DO NOT
-// silently fall back to a hardcoded default any more: an unset model
-// surfaces as a clear dispatch error instead of routing every PR through
-// whatever shape Cadoo happened to ship as the implicit default. Operators
-// who want a baseline model set CADOO_DEFAULT_MODEL (read into d.Model) or
-// pin one per-repo via .cadoo.yaml `model:`.
+// modelName resolves which LLM model this dispatch should use. Per-repo
+// `model:` in .cadoo.yaml wins; otherwise CADOO_DEFAULT_MODEL (read into
+// d.Model) is used. If neither is set we pass an empty string through to
+// the gateway and let it decide (LiteLLM, for example, can route by a
+// default route configured on its side).
 func (d *Dispatcher) modelName(cfg config.Repo) string {
 	if cfg.Model != "" {
 		return cfg.Model

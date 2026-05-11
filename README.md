@@ -22,6 +22,89 @@ Cadoo posts inline review comments, generates PR descriptions, suggests improvem
 - **Knowledge base + learnings** — pgvector-backed; `/learn` and `/unlearn` teach Cadoo team-specific rules that persist across reviews.
 - **Enterprise-ready** — OIDC + SAML SSO, RBAC, tamper-resistant audit log, Helm chart with PodDisruptionBudget, NetworkPolicy, and ServiceMonitor.
 
+## Sample output
+
+A typical PR triggers three things: an edited description, one consolidated review comment, and inline suggestions anchored to the diff. Everything is idempotent across resyncs.
+
+### Edited PR description
+
+The user's text stays on top; Cadoo's section is appended between idempotent markers, so re-running `/describe` replaces it cleanly instead of stacking new copies.
+
+```markdown
+This PR migrates the `/v2/users` endpoint to the new auth middleware.
+Closes #842.
+
+<!-- cadoo:pr-body:begin -->
+## Cadoo description
+
+**Title:** Migrate /v2/users to scoped-token middleware
+
+Replaces the legacy bearer-token check with the new `scopedauth` middleware
+on the /v2/users endpoint to align with the org-wide auth rotation.
+
+**Type:** Enhancement, Tests
+
+**Changes**
+
+- Swap `authn.Bearer` for `scopedauth.Require("users:read")` on the route
+- Drop the now-unused `legacyTokenFromCtx` helper
+- Add table-driven tests covering 401 / 403 / scope-mismatch paths
+- Update `docs/auth.md` with the new scope name
+
+**Risks:** Callers still on legacy tokens will start receiving 403 — feature-flagged behind `auth.scoped_v2`.
+<!-- cadoo:pr-body:end -->
+```
+
+### Consolidated review comment
+
+One top-level comment per PR — never multiple. Each tool (`/review`, `/improve`, `/changelog`, …) appears as a collapsible section, and the comment is edited in place on every resync.
+
+```markdown
+## Cadoo
+
+<details><summary>🔍 <strong>Review</strong></summary>
+
+This PR cleanly swaps the auth middleware. The new scope check is well-tested;
+the only concern is that the rollback path silently drops legacy tokens.
+
+| | |
+|---|---|
+| ⏱ Effort | ●●●○○ |
+| 📄 Files | 7 (~9k tokens) |
+| 🔎 Findings | 2 posted (1 blocking) |
+
+<details><summary>⚡ Focus areas</summary>
+
+- **BLOCK** `internal/auth/scoped.go:84` — Token rotation drops in-flight requests
+- **WARN** `internal/auth/scoped.go:142` — Scope check missing audit log entry
+
+</details>
+
+</details>
+
+<details><summary>💡 <strong>Suggested improvements</strong></summary>
+
+3 inline suggestion(s) posted:
+- `internal/auth/scoped.go:42`
+- `internal/auth/scoped.go:91`
+- `docs/auth.md:18`
+
+</details>
+```
+
+### Inline suggestion
+
+Suggestions are anchored to the exact line. The action is a one-liner; the `suggestion` block lets reviewers apply the change with a single click.
+
+````markdown
+**Suggestions:**
+- Use pinned digest instead of `latest`
+
+```suggestion
+image: ghcr.io/payamqorbanpour/cadoo-cli@sha256:abc123…
+```
+````
+
 ## Architecture
 
 ```
