@@ -13,6 +13,9 @@ func TestEmbedRoundtrip(t *testing.T) {
 		if r.URL.Path != "/v1/embeddings" {
 			t.Errorf("path: %s", r.URL.Path)
 		}
+		if got, want := r.Header.Get("Authorization"), "apikey test-key"; got != want {
+			t.Errorf("Authorization header: got %q, want %q", got, want)
+		}
 		var got embedRequest
 		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
 			t.Fatal(err)
@@ -31,7 +34,7 @@ func TestEmbedRoundtrip(t *testing.T) {
 		})
 	}))
 	defer srv.Close()
-	c := New(srv.URL, "", "")
+	c := New(srv.URL+"/v1", "apikey test-key", "")
 	got, err := c.Embed(context.Background(), []string{"a", "b"})
 	if err != nil {
 		t.Fatal(err)

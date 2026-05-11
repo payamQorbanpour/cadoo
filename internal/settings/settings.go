@@ -67,7 +67,7 @@ func FromEnv() (*Settings, error) {
 	s := &Settings{
 		HTTPAddr:         envOr("HTTP_ADDR", ":8081"),
 		DatabaseURL:      os.Getenv("DATABASE_URL"),
-		LLMGatewayURL:    envOr("LLM_GATEWAY_URL", "http://litellm:4000"),
+		LLMGatewayURL:    envOr("LLM_GATEWAY_URL", "http://litellm:4000/v1"),
 		LLMGatewayAPIKey: os.Getenv("LLM_GATEWAY_API_KEY"),
 		DefaultModel:     envOr("CADOO_DEFAULT_MODEL", "claude-sonnet-4-6"),
 

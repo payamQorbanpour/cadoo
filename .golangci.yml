@@ -1,57 +1,60 @@
+version: "2"
+
 run:
   timeout: 5m
   tests: true
 
 linters:
-  disable-all: true
+  default: none
   enable:
+    - bodyclose
     - errcheck
     - govet
     - ineffassign
-    - staticcheck
-    - unused
-    - gosimple
-    - revive
-    - gofmt
-    - goimports
     - misspell
-    - bodyclose
+    - revive
     - rowserrcheck
     - sqlclosecheck
-
-linters-settings:
-  goimports:
-    local-prefixes: github.com/payamqorbanpour/cadoo
-  revive:
+    - staticcheck
+    - unused
+  settings:
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: empty-block
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: exported
+          disabled: false
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: package-comments
+          disabled: true
+        - name: range
+        - name: receiver-naming
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: time-naming
+        - name: unexported-return
+        - name: unreachable-code
+        - name: unused-parameter
+          disabled: true
+        - name: var-declaration
+  exclusions:
     rules:
-      - name: blank-imports
-      - name: context-as-argument
-      - name: context-keys-type
-      - name: error-return
-      - name: error-strings
-      - name: errorf
-      - name: exported
-        disabled: false
-      - name: increment-decrement
-      - name: var-declaration
-      - name: package-comments
-        disabled: true
-      - name: range
-      - name: receiver-naming
-      - name: time-naming
-      - name: unexported-return
-      - name: indent-error-flow
-      - name: errorf
-      - name: empty-block
-      - name: superfluous-else
-      - name: unused-parameter
-        disabled: true
-      - name: unreachable-code
-      - name: redefines-builtin-id
+      - path: _test\.go
+        linters:
+          - bodyclose
+          - errcheck
 
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
-        - bodyclose
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/payamqorbanpour/cadoo

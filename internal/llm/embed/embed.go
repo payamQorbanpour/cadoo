@@ -31,7 +31,9 @@ type Client struct {
 	HTTPClient *http.Client
 }
 
-// New returns a Client. baseURL should be the gateway origin without /v1.
+// New returns a Client. baseURL must include the OpenAI-style version prefix
+// (e.g. "http://litellm:4000/v1"). apiKey is used verbatim as the Authorization
+// header value (e.g. "Bearer sk-...", "apikey 1234...1234").
 func New(baseURL, apiKey, model string) *Client {
 	if model == "" {
 		model = DefaultModel
@@ -69,13 +71,14 @@ func (c *Client) Embed(ctx context.Context, inputs []string) ([][]float32, error
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/v1/embeddings", bytes.NewReader(body))
+	url := c.BaseURL + "/embeddings"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if c.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+		req.Header.Set("Authorization", c.APIKey)
 	}
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -84,7 +87,7 @@ func (c *Client) Embed(ctx context.Context, inputs []string) ([][]float32, error
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("embeddings: status %d: %s", resp.StatusCode, string(b))
+		return nil, fmt.Errorf("embeddings %s: status %d: %s", url, resp.StatusCode, string(b))
 	}
 	var parsed embedResponse
 	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {

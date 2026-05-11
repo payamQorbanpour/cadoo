@@ -15,6 +15,9 @@ func TestChatRoundtrip(t *testing.T) {
 		if r.URL.Path != "/v1/chat/completions" {
 			t.Errorf("path: %s", r.URL.Path)
 		}
+		if got, want := r.Header.Get("Authorization"), "apikey test-key"; got != want {
+			t.Errorf("Authorization header: got %q, want %q", got, want)
+		}
 		var got chatRequestPayload
 		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
 			t.Fatal(err)
@@ -43,7 +46,7 @@ func TestChatRoundtrip(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, "")
+	c := New(srv.URL+"/v1", "apikey test-key")
 	resp, err := c.Chat(context.Background(), llm.ChatRequest{
 		Model:    "claude-sonnet-4-6",
 		Messages: []llm.Message{{Role: llm.RoleUser, Content: "hello"}},
