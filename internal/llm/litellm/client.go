@@ -4,7 +4,6 @@
 package litellm
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -130,18 +129,9 @@ func (c *Client) Chat(ctx context.Context, req llm.ChatRequest) (*llm.ChatRespon
 		return nil, fmt.Errorf("marshal chat request: %w", err)
 	}
 	url := c.BaseURL + "/chat/completions"
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	resp, err := llm.DoJSON(ctx, c.HTTPClient, http.MethodPost, url, body, c.APIKey)
 	if err != nil {
-		return nil, err
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	if c.APIKey != "" {
-		httpReq.Header.Set("Authorization", c.APIKey)
-	}
-
-	resp, err := c.HTTPClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("do chat request: %w", err)
+		return nil, fmt.Errorf("chat completion %s: %w", url, err)
 	}
 	defer resp.Body.Close()
 

@@ -4,7 +4,6 @@
 package embed
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -12,6 +11,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/payamqorbanpour/cadoo/internal/llm"
 )
 
 // DefaultModel is the default embedding model name. text-embedding-3-small
@@ -72,17 +73,9 @@ func (c *Client) Embed(ctx context.Context, inputs []string) ([][]float32, error
 		return nil, err
 	}
 	url := c.BaseURL + "/embeddings"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	resp, err := llm.DoJSON(ctx, c.HTTPClient, http.MethodPost, url, body, c.APIKey)
 	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if c.APIKey != "" {
-		req.Header.Set("Authorization", c.APIKey)
-	}
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("embeddings: %w", err)
+		return nil, fmt.Errorf("embeddings %s: %w", url, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
