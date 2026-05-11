@@ -53,7 +53,18 @@ builds:
       - -s -w -X github.com/payamqorbanpour/cadoo/internal/version.Version={{.Version}}
 
 archives:
-  - id: default
+  - id: cadoo-api
+    ids: [cadoo-api]
+    name_template: >-
+      {{ .Binary }}_{{ .Version }}_
+      {{- if eq .Os "darwin" }}macos{{ else }}{{ .Os }}{{ end }}_
+      {{- if eq .Arch "amd64" }}x86_64{{ else }}{{ .Arch }}{{ end }}
+    files:
+      - LICENSE
+      - README.md
+
+  - id: cadoo-cli
+    ids: [cadoo-cli]
     name_template: >-
       {{ .Binary }}_{{ .Version }}_
       {{- if eq .Os "darwin" }}macos{{ else }}{{ .Os }}{{ end }}_
@@ -61,6 +72,36 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+
+  - id: cadoo-tunnel
+    ids: [cadoo-tunnel]
+    name_template: >-
+      {{ .Binary }}_{{ .Version }}_
+      {{- if eq .Os "darwin" }}macos{{ else }}{{ .Os }}{{ end }}_
+      {{- if eq .Arch "amd64" }}x86_64{{ else }}{{ .Arch }}{{ end }}
+    files:
+      - LICENSE
+      - README.md
+
+  - id: cadoo-webhook
+    ids: [cadoo-webhook]
+    name_template: >-
+      {{ .Binary }}_{{ .Version }}_
+      {{- if eq .Os "darwin" }}macos{{ else }}{{ .Os }}{{ end }}_
+      {{- if eq .Arch "amd64" }}x86_64{{ else }}{{ .Arch }}{{ end }}
+    files:
+      - LICENSE
+      - README.md
+
+  - id: cadoo-worker
+    ids: [cadoo-worker]
+    name_template: >-
+      {{ .Binary }}_{{ .Version }}_
+      {{- if eq .Os "darwin" }}macos{{ else }}{{ .Os }}{{ end }}_
+      {{- if eq .Arch "amd64" }}x86_64{{ else }}{{ .Arch }}{{ end }}
     files:
       - LICENSE
       - README.md
