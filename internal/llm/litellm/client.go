@@ -23,8 +23,10 @@ type Client struct {
 	HTTPClient *http.Client
 }
 
-// New returns a Client targeting baseURL (e.g. "http://litellm:4000").
-// The /v1 suffix is appended automatically; callers should not include it.
+// New returns a Client targeting baseURL. baseURL must include the OpenAI-style
+// version prefix (e.g. "http://litellm:4000/v1"). apiKey is used verbatim as the
+// Authorization header value (e.g. "Bearer sk-...", "apikey 1234...1234"); the
+// client does not add a scheme prefix.
 func New(baseURL, apiKey string) *Client {
 	return &Client{
 		BaseURL:    strings.TrimRight(baseURL, "/"),
@@ -127,14 +129,14 @@ func (c *Client) Chat(ctx context.Context, req llm.ChatRequest) (*llm.ChatRespon
 	if err != nil {
 		return nil, fmt.Errorf("marshal chat request: %w", err)
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		c.BaseURL+"/v1/chat/completions", bytes.NewReader(body))
+	url := c.BaseURL + "/chat/completions"
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	if c.APIKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+c.APIKey)
+		httpReq.Header.Set("Authorization", c.APIKey)
 	}
 
 	resp, err := c.HTTPClient.Do(httpReq)
@@ -145,7 +147,7 @@ func (c *Client) Chat(ctx context.Context, req llm.ChatRequest) (*llm.ChatRespon
 
 	if resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("chat completion: status %d: %s", resp.StatusCode, string(b))
+		return nil, fmt.Errorf("chat completion %s: status %d: %s", url, resp.StatusCode, string(b))
 	}
 
 	var parsed chatResponsePayload
