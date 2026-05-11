@@ -1,0 +1,36 @@
+# Build artifacts
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+coverage.*
+
+# Go
+vendor/
+.go-build/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local data
+/data/
+*.sqlite
+*.db
+
+# Generated
+internal/db/sqlc_gen/
+
+# Claude
+.claude
+.serena

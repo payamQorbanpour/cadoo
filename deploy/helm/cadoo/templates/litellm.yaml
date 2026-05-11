@@ -1,0 +1,53 @@
+{{- if .Values.litellm.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cadoo.fullname" . }}-litellm
+  labels:
+    {{- include "cadoo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: litellm
+spec:
+  replicas: {{ .Values.litellm.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: litellm
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        {{- include "cadoo.labels" . | nindent 8 }}
+        app.kubernetes.io/component: litellm
+    spec:
+      containers:
+        - name: litellm
+          image: {{ .Values.litellm.image }}
+          args: ["--config", "/etc/litellm/config.yaml", "--port", "4000"]
+          ports:
+            - containerPort: 4000
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secretsRef.name }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/litellm
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ .Values.litellm.configMapName }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cadoo-litellm
+  labels:
+    {{- include "cadoo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: litellm
+spec:
+  ports:
+    - port: 4000
+      targetPort: 4000
+  selector:
+    app.kubernetes.io/component: litellm
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

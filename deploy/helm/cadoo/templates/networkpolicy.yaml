@@ -1,0 +1,72 @@
+{{- if .Values.hardening.networkPolicy.enabled }}
+# Default deny-all for every Cadoo pod. Subsequent rules below allow the
+# specific traffic each component needs.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cadoo.fullname" . }}-default-deny
+  labels:
+    {{- include "cadoo.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: [Ingress, Egress]
+---
+# Allow intra-release traffic on every component port (api/webhook/litellm/postgres).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cadoo.fullname" . }}-allow-intra
+  labels:
+    {{- include "cadoo.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+    # DNS is needed for everything else.
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+{{- with .Values.hardening.networkPolicy.egressCIDRs }}
+---
+# Allow webhook + worker to reach external services (LLM, VCS, trackers).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cadoo.fullname" $ }}-allow-egress
+  labels:
+    {{- include "cadoo.labels" $ | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values: [webhook, worker]
+      - key: app.kubernetes.io/instance
+        operator: In
+        values: [ {{ $.Release.Name }} ]
+  policyTypes: [Egress]
+  egress:
+    - to:
+        {{- range . }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+{{- end }}
+{{- end }}

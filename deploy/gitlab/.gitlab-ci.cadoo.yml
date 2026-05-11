@@ -1,0 +1,41 @@
+# Cadoo CI-mode: AI code review inside the GitLab pipeline.
+#
+# Drop this file's `cadoo-review` job into your `.gitlab-ci.yml` (or
+# `include:` this file from your project). No server, no webhook —
+# everything happens inside one CI job.
+#
+# Prerequisites (CI/CD Settings → Variables, all masked + protected):
+#   GITLAB_TOKEN          Personal or Project Access Token (api scope).
+#                         Cadoo posts as the owner of this token; for the
+#                         "@project_NNN_bot_HEX" identity, mint
+#                         a Project Access Token.
+#   LLM_GATEWAY_URL       OpenAI-compatible base URL (must end in /v1).
+#                         For a self-hosted LiteLLM proxy, this is its
+#                         /v1 endpoint. For Anthropic/OpenAI direct, use
+#                         their respective API base URLs.
+#   LLM_GATEWAY_API_KEY   The matching API key.
+#
+# Optional:
+#   CADOO_DEFAULT_MODEL   Defaults to "claude-sonnet-4-6".
+#   CADOO_TOOLS           Comma-separated tools to run. Defaults to
+#                         "describe,review,improve".
+
+cadoo-review:
+  stage: test
+  image:
+    name: ghcr.io/payamqorbanpour/cadoo-cli:latest
+    entrypoint: [""]
+  variables:
+    # No git history needed; cadoo fetches the MR diff via the API.
+    GIT_DEPTH: "1"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  script:
+    - |
+      set -e
+      export MR_URL="${CI_MERGE_REQUEST_PROJECT_URL}/-/merge_requests/${CI_MERGE_REQUEST_IID}"
+      cadoo ci \
+        --mr "${MR_URL}" \
+        --tools "${CADOO_TOOLS:-describe,review,improve}" \
+        --repo "${CI_PROJECT_DIR}"
+  allow_failure: true

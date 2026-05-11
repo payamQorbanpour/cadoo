@@ -1,0 +1,84 @@
+# Example .cadoo.yaml — drop into the root of any repo Cadoo reviews.
+# This file is the per-repo override; org-level defaults live in the dashboard.
+
+# Which model to use for reviews. Routes through the LLM gateway,
+# which can resolve to Anthropic, OpenAI, Gemini, DeepSeek, Ollama, etc.
+model: claude-sonnet-4-6
+
+# How aggressively /review surfaces findings:
+#   minimal  = production-breaking bugs only
+#   balanced = bugs, security, perf, clear maintainability (default)
+#   strict   = everything a senior reviewer would object to
+#   pedantic = include nits and style notes
+strictness: balanced
+
+# Team conventions injected into every review's user message as authoritative.
+conventions:
+  - "Errors must be wrapped with %w when crossing package boundaries."
+  - "All exported Go symbols must have a docstring."
+  - "Database migrations are forward-only; never DROP COLUMN."
+
+# Per-language style blurbs surfaced alongside conventions.
+style_guides:
+  go: "Prefer table-driven tests. Use t.Helper() in test helpers."
+  python: "Type hints on every public function. f-strings preferred over .format()."
+  typescript: "Strict mode on. No `any` without an inline justification comment."
+
+# Per-tool prompt customization. Override REPLACES the default prompt
+# (you take responsibility for completeness); Addendum APPENDS to the
+# default (recommended — keeps Cadoo's anti-pattern guards intact).
+prompts:
+  review:
+    addendum: |
+      When reviewing changes to internal/auth, treat any change to token
+      verification or RBAC checks as security-sensitive even if the diff
+      looks small.
+  describe:
+    addendum: ""
+
+# Comment policy — keeps Cadoo from spamming clean PRs.
+comment_policy:
+  silent_on_clean: true        # post a passing check-run only, no comment
+  skip_if_only_nits: true      # drop the run entirely if every finding is a nit
+  min_findings_to_post: 1      # require at least N findings to post anything
+
+# Auto-trigger matrix. Each tool can be set to: never | on_open | on_sync | on_label
+auto:
+  review: on_open
+  describe: on_open
+  improve: on_sync
+  changelog: never
+
+# Review behaviour
+review:
+  severity_threshold: warn        # block | warn | nit — anything below is hidden
+  include_paths: ["**/*"]
+  exclude_paths:
+    - "vendor/**"
+    - "node_modules/**"
+    - "**/*.generated.go"
+    - "**/*.pb.go"
+  max_comments: 30
+  request_changes_on: ["block"]   # severities that mark the PR as Changes Requested
+
+# Path-based instructions (glob → natural-language guidance)
+path_instructions:
+  - paths: ["**/*.go"]
+    instructions: "Prefer table-driven tests. Avoid panics in library code."
+  - paths: ["db/migrations/**/*.sql"]
+    instructions: "Forward-only migrations. Flag any DROP COLUMN."
+
+# Custom natural-language checks
+checks:
+  - name: no-fmt-println-in-handlers
+    paths: ["internal/api/**/*.go"]
+    prompt: "Flag any fmt.Println usage; handlers should use the structured logger."
+    severity: warn
+
+# ast-grep structural rules (path glob → rule file)
+ast_grep:
+  rules: []
+
+# Knowledge base — repos to ingest as cross-references
+kb:
+  cross_repos: []

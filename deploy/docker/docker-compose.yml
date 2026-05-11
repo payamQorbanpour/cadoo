@@ -1,0 +1,72 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: cadoo
+      POSTGRES_PASSWORD: cadoo
+      POSTGRES_DB: cadoo
+    ports: ["5432:5432"]
+    volumes:
+      - cadoo-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cadoo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # LiteLLM proxy — exposes an OpenAI-compatible endpoint for 100+ providers.
+  # Configure model routing in litellm-config.yaml.
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    command: ["--config", "/etc/litellm/config.yaml", "--port", "4000"]
+    ports: ["4000:4000"]
+    volumes:
+      - ./litellm-config.yaml:/etc/litellm/config.yaml:ro
+    environment:
+      # Provider keys come from the user's .env file at the repo root.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+
+  cadoo-api:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        CMD: cadoo-api
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgres://cadoo:cadoo@postgres:5432/cadoo?sslmode=disable
+      LLM_GATEWAY_URL: http://litellm:4000
+      HTTP_ADDR: ":8080"
+    ports: ["8080:8080"]
+
+  cadoo-webhook:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        CMD: cadoo-webhook
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgres://cadoo:cadoo@postgres:5432/cadoo?sslmode=disable
+      HTTP_ADDR: ":8081"
+    ports: ["8081:8081"]
+
+  cadoo-worker:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        CMD: cadoo-worker
+    depends_on:
+      postgres: { condition: service_healthy }
+      litellm: { condition: service_started }
+    environment:
+      DATABASE_URL: postgres://cadoo:cadoo@postgres:5432/cadoo?sslmode=disable
+      LLM_GATEWAY_URL: http://litellm:4000
+
+volumes:
+  cadoo-pg: {}

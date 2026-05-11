@@ -1,0 +1,50 @@
+# Cadoo polyglot sandbox image — bundles every linter Cadoo's analysis
+# layer can dispatch, so each PR-review job pulls one image instead of N.
+#
+# Build:
+#   docker build -f deploy/docker/Dockerfile.sandbox-polyglot \
+#                -t cadoo/sandbox-polyglot:latest .
+#
+# Run-time contract: a workspace is mounted at /workspace, and Cadoo invokes
+# linters with paths relative to it. NoNetwork is enforced by the runner.
+
+FROM alpine:3.19
+
+# OS deps + interpreters. golangci-lint and ruff are downloaded as static
+# binaries to avoid a Go/Python toolchain in the runtime image.
+RUN apk add --no-cache \
+        bash \
+        ca-certificates \
+        curl \
+        nodejs \
+        npm \
+        python3 \
+        py3-pip \
+        shellcheck \
+    && rm -rf /var/cache/apk/*
+
+# golangci-lint — official install script.
+ARG GOLANGCI_VERSION=v1.62.2
+RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
+        | sh -s -- -b /usr/local/bin "${GOLANGCI_VERSION}"
+
+# ruff — astral-sh standalone binary.
+ARG RUFF_VERSION=0.7.4
+RUN curl -sSfL "https://github.com/astral-sh/ruff/releases/download/${RUFF_VERSION}/ruff-x86_64-unknown-linux-musl.tar.gz" \
+        | tar -xz -C /tmp \
+    && mv "/tmp/ruff-x86_64-unknown-linux-musl/ruff" /usr/local/bin/ruff \
+    && rm -rf "/tmp/ruff-x86_64-unknown-linux-musl"
+
+# eslint — installed globally with no config; we always pass --no-eslintrc
+# from the wrapper so the workspace's own config is what runs.
+RUN npm install -g --omit=dev eslint@9 typescript@5
+
+# semgrep — pip-installed; pulls a small bundle of curated rules at build time
+# so --config p/default works offline.
+RUN pip3 install --no-cache-dir --break-system-packages semgrep \
+    && semgrep --config p/default --quiet --error / 2>/dev/null || true
+
+WORKDIR /workspace
+USER 65532:65532
+ENTRYPOINT []
+CMD ["/bin/sh"]

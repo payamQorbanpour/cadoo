@@ -1,0 +1,20 @@
+{{- if .Values.hardening.podDisruptionBudget.enabled }}
+{{- range $component := list "api" "webhook" "worker" }}
+{{- if (index $.Values $component).enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "cadoo.fullname" $ }}-{{ $component }}
+  labels:
+    {{- include "cadoo.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+spec:
+  minAvailable: {{ $.Values.hardening.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: {{ $component }}
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+{{- end }}
+{{- end }}
+{{- end }}

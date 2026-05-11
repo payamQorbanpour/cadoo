@@ -1,0 +1,37 @@
+{
+  "name": "cadoo-vscode",
+  "displayName": "Cadoo",
+  "description": "AI code review in your editor — local /review against the cadoo-api you run.",
+  "version": "0.1.0",
+  "publisher": "cadoo",
+  "license": "MIT",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other"],
+  "main": "./dist/extension.js",
+  "activationEvents": ["onCommand:cadoo.review", "onCommand:cadoo.config.validate"],
+  "contributes": {
+    "commands": [
+      { "command": "cadoo.review", "title": "Cadoo: Review current file" },
+      { "command": "cadoo.config.validate", "title": "Cadoo: Validate .cadoo.yaml" }
+    ],
+    "configuration": {
+      "title": "Cadoo",
+      "properties": {
+        "cadoo.apiUrl": {
+          "type": "string",
+          "default": "http://localhost:8080",
+          "description": "URL of your local cadoo-api binary."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -p . --watch"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0"
+  }
+}

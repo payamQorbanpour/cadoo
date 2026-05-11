@@ -1,0 +1,344 @@
+// Package github implements vcs.Provider against GitHub.com and GitHub
+// Enterprise Server. Authentication is via GitHub App installation tokens
+// (bradleyfalzon/ghinstallation).
+package github
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/bradleyfalzon/ghinstallation/v2"
+	gogithub "github.com/google/go-github/v66/github"
+
+	"github.com/payamqorbanpour/cadoo/internal/vcs"
+)
+
+// Config configures the adapter.
+type Config struct {
+	BaseURL        string // empty for github.com; e.g. "https://ghe.example.com/api/v3" for GHES
+	UploadURL      string // optional GHES upload URL
+	AppID          int64
+	InstallationID int64
+	PrivateKeyPEM  []byte
+}
+
+// Adapter is the GitHub vcs.Provider implementation.
+type Adapter struct {
+	cfg    Config
+	client *gogithub.Client
+}
+
+// New authenticates as a GitHub App installation and returns a ready Adapter.
+func New(cfg Config) (*Adapter, error) {
+	tr, err := ghinstallation.New(http.DefaultTransport, cfg.AppID, cfg.InstallationID, cfg.PrivateKeyPEM)
+	if err != nil {
+		return nil, fmt.Errorf("github app auth: %w", err)
+	}
+	if cfg.BaseURL != "" {
+		tr.BaseURL = strings.TrimRight(cfg.BaseURL, "/")
+	}
+
+	httpClient := &http.Client{Transport: tr, Timeout: 30 * time.Second}
+
+	var client *gogithub.Client
+	if cfg.BaseURL == "" {
+		client = gogithub.NewClient(httpClient)
+	} else {
+		client, err = gogithub.NewClient(httpClient).WithEnterpriseURLs(cfg.BaseURL, cfg.UploadURL)
+		if err != nil {
+			return nil, fmt.Errorf("ghes urls: %w", err)
+		}
+	}
+	return &Adapter{cfg: cfg, client: client}, nil
+}
+
+// Kind reports github.com vs GHES.
+func (a *Adapter) Kind() vcs.Kind {
+	if a.cfg.BaseURL == "" {
+		return vcs.KindGitHub
+	}
+	return vcs.KindGitHubEnterprise
+}
+
+// FetchPullRequest implements vcs.Provider.
+func (a *Adapter) FetchPullRequest(ctx context.Context, repo string, number int64) (*vcs.PullRequest, error) {
+	owner, name, err := splitRepo(repo)
+	if err != nil {
+		return nil, err
+	}
+	pr, _, err := a.client.PullRequests.Get(ctx, owner, name, int(number))
+	if err != nil {
+		return nil, fmt.Errorf("get pr %s#%d: %w", repo, number, err)
+	}
+	return convertPR(pr, repo, a.Kind()), nil
+}
+
+// ListChangedFiles implements vcs.Provider with paginated retrieval.
+func (a *Adapter) ListChangedFiles(ctx context.Context, pr *vcs.PullRequest) ([]vcs.FileChange, error) {
+	owner, name, err := splitRepo(pr.RepoFullName)
+	if err != nil {
+		return nil, err
+	}
+	var out []vcs.FileChange
+	opts := &gogithub.ListOptions{PerPage: 100}
+	for {
+		files, resp, err := a.client.PullRequests.ListFiles(ctx, owner, name, int(pr.Number), opts)
+		if err != nil {
+			return nil, fmt.Errorf("list files %s#%d: %w", pr.RepoFullName, pr.Number, err)
+		}
+		for _, f := range files {
+			out = append(out, vcs.FileChange{
+				Path:      f.GetFilename(),
+				PrevPath:  f.GetPreviousFilename(),
+				Status:    f.GetStatus(),
+				Patch:     f.GetPatch(),
+				Additions: f.GetAdditions(),
+				Deletions: f.GetDeletions(),
+				IsBinary:  f.GetPatch() == "" && f.GetChanges() > 0,
+			})
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+	return out, nil
+}
+
+// PostSummaryComment creates an issue comment and returns its numeric ID
+// as a decimal string.
+func (a *Adapter) PostSummaryComment(ctx context.Context, pr *vcs.PullRequest, body string) (string, error) {
+	owner, name, err := splitRepo(pr.RepoFullName)
+	if err != nil {
+		return "", err
+	}
+	c, _, err := a.client.Issues.CreateComment(ctx, owner, name, int(pr.Number),
+		&gogithub.IssueComment{Body: ptr(body)})
+	if err != nil {
+		return "", fmt.Errorf("create issue comment: %w", err)
+	}
+	return strconv.FormatInt(c.GetID(), 10), nil
+}
+
+// UpdateSummaryComment edits an existing issue comment.
+func (a *Adapter) UpdateSummaryComment(ctx context.Context, pr *vcs.PullRequest, id, body string) error {
+	owner, name, err := splitRepo(pr.RepoFullName)
+	if err != nil {
+		return err
+	}
+	cid, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid comment id %q: %w", id, err)
+	}
+	_, _, err = a.client.Issues.EditComment(ctx, owner, name, cid,
+		&gogithub.IssueComment{Body: ptr(body)})
+	return err
+}
+
+// PostInlineComments creates a single PR review with all inline comments.
+// Multi-line comments use start_line/line on the RIGHT side of the diff.
+func (a *Adapter) PostInlineComments(ctx context.Context, pr *vcs.PullRequest, comments []vcs.InlineComment) error {
+	if len(comments) == 0 {
+		return nil
+	}
+	owner, name, err := splitRepo(pr.RepoFullName)
+	if err != nil {
+		return err
+	}
+	drafts := make([]*gogithub.DraftReviewComment, 0, len(comments))
+	for _, c := range comments {
+		body := formatSeverity(c.Severity) + c.Body
+		dc := &gogithub.DraftReviewComment{
+			Path: ptr(c.File),
+			Body: ptr(body),
+			Side: ptr("RIGHT"),
+		}
+		switch {
+		case c.LineStart > 0 && c.LineEnd > c.LineStart:
+			dc.StartLine = ptr(c.LineStart)
+			dc.Line = ptr(c.LineEnd)
+			dc.StartSide = ptr("RIGHT")
+		case c.LineStart > 0:
+			dc.Line = ptr(c.LineStart)
+		default:
+			// File-level comment falls back to position 1.
+			dc.Line = ptr(1)
+		}
+		drafts = append(drafts, dc)
+	}
+	_, _, err = a.client.PullRequests.CreateReview(ctx, owner, name, int(pr.Number),
+		&gogithub.PullRequestReviewRequest{
+			Event:    ptr("COMMENT"),
+			Comments: drafts,
+		})
+	return err
+}
+
+// FetchArchive returns a gzipped tarball of the repo at ref. Used by the
+// orchestrator to materialize a workspace for sandboxed linters. The
+// archive URL is presigned by GitHub for ~5 minutes; we follow it with the
+// default HTTP client (no auth on the redirect target).
+func (a *Adapter) FetchArchive(ctx context.Context, repo, ref string) (io.ReadCloser, error) {
+	owner, name, err := splitRepo(repo)
+	if err != nil {
+		return nil, err
+	}
+	link, _, err := a.client.Repositories.GetArchiveLink(ctx, owner, name, gogithub.Tarball,
+		&gogithub.RepositoryContentGetOptions{Ref: ref}, 5)
+	if err != nil {
+		return nil, fmt.Errorf("get archive link %s@%s: %w", repo, ref, err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, link.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetch archive %s@%s: %w", repo, ref, err)
+	}
+	if resp.StatusCode >= 300 {
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("fetch archive %s@%s: status %d", repo, ref, resp.StatusCode)
+	}
+	return resp.Body, nil
+}
+
+// FetchFileFromRef returns the raw contents of a file at a specific git ref
+// (commit, branch, or tag). Used by the orchestrator to read .cadoo.yaml
+// from the PR's head SHA. Not part of vcs.Provider — orchestrator
+// type-asserts on *Adapter.
+func (a *Adapter) FetchFileFromRef(ctx context.Context, repo, ref, path string) ([]byte, error) {
+	owner, name, err := splitRepo(repo)
+	if err != nil {
+		return nil, err
+	}
+	file, _, _, err := a.client.Repositories.GetContents(ctx, owner, name, path,
+		&gogithub.RepositoryContentGetOptions{Ref: ref})
+	if err != nil {
+		return nil, fmt.Errorf("get contents %s@%s:%s: %w", repo, ref, path, err)
+	}
+	if file == nil {
+		return nil, fmt.Errorf("%s@%s:%s is not a regular file", repo, ref, path)
+	}
+	content, err := file.GetContent()
+	if err != nil {
+		return nil, fmt.Errorf("decode content: %w", err)
+	}
+	return []byte(content), nil
+}
+
+// UpsertCheckRun creates or updates the named check run on the head SHA.
+func (a *Adapter) UpsertCheckRun(ctx context.Context, pr *vcs.PullRequest, run vcs.CheckRun) error {
+	owner, name, err := splitRepo(pr.RepoFullName)
+	if err != nil {
+		return err
+	}
+	output := &gogithub.CheckRunOutput{
+		Title:   ptr(run.Title),
+		Summary: ptr(run.Summary),
+	}
+	status, conclusion := mapCheckStatus(run.Status)
+
+	existing, _, err := a.client.Checks.ListCheckRunsForRef(ctx, owner, name, pr.HeadSHA,
+		&gogithub.ListCheckRunsOptions{CheckName: ptr(run.Name)})
+	if err != nil {
+		return fmt.Errorf("list check runs: %w", err)
+	}
+
+	if existing.GetTotal() > 0 {
+		opts := gogithub.UpdateCheckRunOptions{
+			Name:   run.Name,
+			Status: ptr(status),
+			Output: output,
+		}
+		if conclusion != "" {
+			opts.Conclusion = ptr(conclusion)
+		}
+		if run.URL != "" {
+			opts.DetailsURL = ptr(run.URL)
+		}
+		_, _, err = a.client.Checks.UpdateCheckRun(ctx, owner, name, existing.CheckRuns[0].GetID(), opts)
+		return err
+	}
+
+	create := gogithub.CreateCheckRunOptions{
+		Name:    run.Name,
+		HeadSHA: pr.HeadSHA,
+		Status:  ptr(status),
+		Output:  output,
+	}
+	if conclusion != "" {
+		create.Conclusion = ptr(conclusion)
+	}
+	if run.URL != "" {
+		create.DetailsURL = ptr(run.URL)
+	}
+	_, _, err = a.client.Checks.CreateCheckRun(ctx, owner, name, create)
+	return err
+}
+
+func splitRepo(full string) (string, string, error) {
+	i := strings.IndexByte(full, '/')
+	if i <= 0 || i == len(full)-1 {
+		return "", "", fmt.Errorf("invalid repo %q (want owner/name)", full)
+	}
+	return full[:i], full[i+1:], nil
+}
+
+func convertPR(pr *gogithub.PullRequest, repo string, kind vcs.Kind) *vcs.PullRequest {
+	return &vcs.PullRequest{
+		Provider:     kind,
+		RepoFullName: repo,
+		Number:       int64(pr.GetNumber()),
+		Title:        pr.GetTitle(),
+		Body:         pr.GetBody(),
+		Author:       pr.GetUser().GetLogin(),
+		BaseSHA:      pr.GetBase().GetSHA(),
+		HeadSHA:      pr.GetHead().GetSHA(),
+		BaseRef:      pr.GetBase().GetRef(),
+		HeadRef:      pr.GetHead().GetRef(),
+		State:        pr.GetState(),
+		URL:          pr.GetHTMLURL(),
+		UpdatedAt:    pr.GetUpdatedAt().Time,
+	}
+}
+
+func formatSeverity(s vcs.Severity) string {
+	switch s {
+	case vcs.SeverityBlock:
+		return "**[BLOCK]** "
+	case vcs.SeverityWarn:
+		return "**[WARN]** "
+	case vcs.SeverityNit:
+		return "_[nit]_ "
+	}
+	return ""
+}
+
+func mapCheckStatus(s vcs.CheckRunStatus) (status, conclusion string) {
+	switch s {
+	case vcs.CheckQueued:
+		return "queued", ""
+	case vcs.CheckRunning:
+		return "in_progress", ""
+	case vcs.CheckSucceeded:
+		return "completed", "success"
+	case vcs.CheckFailed:
+		return "completed", "failure"
+	case vcs.CheckNeutral:
+		return "completed", "neutral"
+	}
+	return "queued", ""
+}
+
+// ptr is a tiny generic pointer helper. go-github v66 ships the traditional
+// per-type helpers (String, Int, Int64, Bool); we use this to keep call sites
+// uniform regardless of element type.
+func ptr[T any](v T) *T { return &v }
+
+var _ vcs.Provider = (*Adapter)(nil)

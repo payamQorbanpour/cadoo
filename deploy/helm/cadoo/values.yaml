@@ -1,0 +1,101 @@
+image:
+  repository: ghcr.io/payamqorbanpour/cadoo
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# Hardening toggles. Off by default so a `helm install` against minikube
+# Just Works; flip on for production clusters.
+hardening:
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+  networkPolicy:
+    enabled: false
+    # Egress destinations the webhook/worker need beyond cluster-internal:
+    # the LLM gateway, GitHub/GitLab API, optional Jira/Linear/Slack.
+    # Adjust to your network. Empty list == cluster-internal only.
+    egressCIDRs: []
+  serviceMonitor:
+    enabled: false
+    # The kube-prometheus operator's namespace selector matches by label.
+    # Set this to whatever release Prometheus is watching.
+    labels:
+      release: kube-prometheus-stack
+    interval: 30s
+
+# Component-level toggles. Disable any service you don't need.
+api:
+  enabled: true
+  replicas: 1
+  service:
+    type: ClusterIP
+    port: 8080
+  resources: {}
+
+webhook:
+  enabled: true
+  replicas: 1
+  service:
+    type: ClusterIP
+    port: 8081
+  ingress:
+    enabled: false
+    host: cadoo-webhook.example.com
+    className: ""
+    tls: false
+  resources: {}
+
+worker:
+  enabled: true
+  replicas: 1
+  resources: {}
+
+# Bundled Postgres (for dev/PoC). For production, point database.url at your
+# managed Postgres + pgvector extension and set postgres.enabled = false.
+postgres:
+  enabled: true
+  image: pgvector/pgvector:pg16
+  storage: 10Gi
+  user: cadoo
+  password: cadoo
+  database: cadoo
+
+# LiteLLM proxy. Disable to run in "no-egress" mode against an in-cluster
+# LLM (e.g. Ollama, vLLM) and point llm.gatewayURL at it.
+litellm:
+  enabled: true
+  image: ghcr.io/berriai/litellm:main-stable
+  replicas: 1
+  configMapName: cadoo-litellm-config
+
+# Connection strings + provider secrets.
+database:
+  # If postgres.enabled, this is auto-built. Override for an external DB.
+  url: ""
+
+llm:
+  gatewayURL: "http://cadoo-litellm:4000"
+  # If you disable litellm and bring your own endpoint, set its API key here.
+  gatewayAPIKey: ""
+  defaultModel: "claude-sonnet-4-6"
+
+# All credentials below come from a Kubernetes Secret named secretsRef.name.
+# Required keys when populated: ANTHROPIC_API_KEY (or OPENAI_API_KEY etc),
+# GITHUB_APP_PRIVATE_KEY, GITHUB_WEBHOOK_SECRET, GITLAB_TOKEN,
+# GITLAB_WEBHOOK_SECRET, JIRA_TOKEN, LINEAR_API_KEY, SLACK_WEBHOOK_URL.
+secretsRef:
+  name: cadoo-secrets
+
+# Non-sensitive env passthrough. Stuffed into a ConfigMap; merged with
+# values from secretsRef on each pod.
+env:
+  GITHUB_APP_ID: ""
+  GITHUB_INSTALLATION_ID: ""
+  GITHUB_BASE_URL: ""
+  GITLAB_BASE_URL: ""
+  JIRA_BASE_URL: ""
+  JIRA_EMAIL: ""
+  OIDC_ISSUER: ""
+  OIDC_CLIENT_ID: ""
+  REPORTS_INTERVAL: "24h"
+  CADOO_DEFAULT_MODEL: "claude-sonnet-4-6"

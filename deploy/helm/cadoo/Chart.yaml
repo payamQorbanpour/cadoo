@@ -1,0 +1,10 @@
+apiVersion: v2
+name: cadoo
+description: AI code reviewer — multi-VCS, multi-tenant, self-hostable.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/payamqorbanpour/cadoo
+maintainers:
+  - name: Cadoo Authors
+icon: ""
