@@ -66,23 +66,37 @@ func TestOpenExtractsAndFlattens(t *testing.T) {
 }
 
 func TestExtractRejectsPathTraversal(t *testing.T) {
+	// Set up a writable sibling dir to "escape" into; verify the entry
+	// neither lands there nor inside dest.
+	root := t.TempDir()
+	dest := filepath.Join(root, "dest")
+	sibling := filepath.Join(root, "sibling")
+	for _, d := range []string{dest, sibling} {
+		if err := os.Mkdir(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gz)
-	bad := "../../../etc/passwd"
-	_ = tw.WriteHeader(&tar.Header{Name: bad, Mode: 0o644, Size: 4, Typeflag: tar.TypeReg})
+	_ = tw.WriteHeader(&tar.Header{Name: "../sibling/escaped.txt", Mode: 0o644, Size: 4, Typeflag: tar.TypeReg})
 	_, _ = tw.Write([]byte("oops"))
 	_ = tw.Close()
 	_ = gz.Close()
 
-	dir := t.TempDir()
-	if err := extractTarGz(&buf, dir); err != nil {
+	if err := extractTarGz(&buf, dest); err != nil {
 		t.Fatal(err)
 	}
-	// File should NOT have been written outside dir.
-	parent := filepath.Dir(filepath.Dir(filepath.Dir(dir)))
-	if _, err := os.Stat(filepath.Join(parent, "etc", "passwd")); err == nil {
-		t.Fatal("path-traversal succeeded")
+	if _, err := os.Stat(filepath.Join(sibling, "escaped.txt")); err == nil {
+		t.Fatal("path-traversal succeeded: file written to sibling")
+	}
+	entries, err := os.ReadDir(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("dest should be empty, got %d entries", len(entries))
 	}
 }
 
