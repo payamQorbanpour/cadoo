@@ -101,7 +101,7 @@ func (c *HTTPClient) Call(ctx context.Context, method string, params any, out an
 	if err != nil {
 		return fmt.Errorf("mcp call %s: %w", method, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("mcp call %s: status %d: %s", method, resp.StatusCode, string(b))

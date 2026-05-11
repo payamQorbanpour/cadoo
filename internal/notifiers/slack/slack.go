@@ -38,8 +38,8 @@ type slackPayload struct {
 }
 
 type block struct {
-	Type string         `json:"type"`
-	Text *blockText     `json:"text,omitempty"`
+	Type string     `json:"type"`
+	Text *blockText `json:"text,omitempty"`
 }
 
 type blockText struct {
@@ -80,7 +80,7 @@ func (n *Notifier) NotifyResult(ctx context.Context, pr *vcs.PullRequest, tool s
 	if err != nil {
 		return fmt.Errorf("slack post: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("slack post: status %d: %s", resp.StatusCode, string(b))
@@ -88,10 +88,10 @@ func (n *Notifier) NotifyResult(ctx context.Context, pr *vcs.PullRequest, tool s
 	return nil
 }
 
-func summarize(res *tools.Result, max int) string {
+func summarize(res *tools.Result, maxLen int) string {
 	parts := []string{}
 	if res.Summary != "" {
-		parts = append(parts, truncate(res.Summary, max))
+		parts = append(parts, truncate(res.Summary, maxLen))
 	}
 	if len(res.InlineComments) > 0 {
 		parts = append(parts, fmt.Sprintf("_%d inline finding(s) posted._", len(res.InlineComments)))

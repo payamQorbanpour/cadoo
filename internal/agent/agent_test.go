@@ -88,7 +88,7 @@ func TestLoopMaxIter(t *testing.T) {
 	llmStub := &scriptedLLM{}
 	for i := 0; i < 10; i++ {
 		llmStub.queue = append(llmStub.queue, llm.ChatResponse{
-			Content: "again",
+			Content:   "again",
 			ToolCalls: []llm.ToolCall{{ID: "c", Name: "read_file", Arguments: json.RawMessage(`{"path":"x"}`)}},
 		})
 	}

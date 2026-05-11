@@ -77,7 +77,7 @@ func (c *Client) Embed(ctx context.Context, inputs []string) ([][]float32, error
 	if err != nil {
 		return nil, fmt.Errorf("embeddings %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("embeddings %s: status %d: %s", url, resp.StatusCode, string(b))

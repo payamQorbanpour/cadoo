@@ -107,7 +107,7 @@ func (t *Tracker) fetchOne(ctx context.Context, identifier string) (*issuetracke
 	if err != nil {
 		return nil, fmt.Errorf("linear fetch %s: %w", identifier, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 {
 		raw, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("linear %s: status %d: %s", identifier, resp.StatusCode, string(raw))

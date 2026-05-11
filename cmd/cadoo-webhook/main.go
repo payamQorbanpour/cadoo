@@ -31,7 +31,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	gogithub "github.com/google/go-github/v66/github"
 	"github.com/jackc/pgx/v5/pgxpool"
-	glab "github.com/xanzy/go-gitlab"
+	glab "gitlab.com/gitlab-org/api/client-go"
 
 	"github.com/payamqorbanpour/cadoo/internal/analysis/sandbox"
 	"github.com/payamqorbanpour/cadoo/internal/audit"

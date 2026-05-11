@@ -57,13 +57,13 @@ func (l Linter) Run(ctx context.Context, runner sandbox.Runner, ws analysis.Work
 }
 
 type shellcheckIssue struct {
-	File     string `json:"file"`
-	Line     int    `json:"line"`
-	EndLine  int    `json:"endLine"`
-	Column   int    `json:"column"`
-	Level    string `json:"level"` // info | warning | error | style
-	Code     int    `json:"code"`
-	Message  string `json:"message"`
+	File    string `json:"file"`
+	Line    int    `json:"line"`
+	EndLine int    `json:"endLine"`
+	Column  int    `json:"column"`
+	Level   string `json:"level"` // info | warning | error | style
+	Code    int    `json:"code"`
+	Message string `json:"message"`
 }
 
 // ParseJSON converts shellcheck -f json output into Findings.

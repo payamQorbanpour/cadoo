@@ -22,8 +22,8 @@ const (
 	RoleViewer Role = "viewer"
 )
 
-// Allows reports whether r is at least as privileged as min.
-func (r Role) Allows(min Role) bool { return rank(r) >= rank(min) }
+// Allows reports whether r is at least as privileged as minRole.
+func (r Role) Allows(minRole Role) bool { return rank(r) >= rank(minRole) }
 
 func rank(r Role) int {
 	switch r {
@@ -49,10 +49,10 @@ type Claims struct {
 	Roles   []string `json:"roles"`
 }
 
-// HasRole reports whether the claims include any role at or above min.
-func (c *Claims) HasRole(min Role) bool {
+// HasRole reports whether the claims include any role at or above minRole.
+func (c *Claims) HasRole(minRole Role) bool {
 	for _, r := range c.Roles {
-		if Role(r).Allows(min) {
+		if Role(r).Allows(minRole) {
 			return true
 		}
 	}

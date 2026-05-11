@@ -32,8 +32,8 @@ func Required(verifier *Verifier) func(http.Handler) http.Handler {
 }
 
 // RequireRole is a chi middleware that returns 403 unless the request's
-// claims include any role at or above min.
-func RequireRole(min Role) func(http.Handler) http.Handler {
+// claims include any role at or above minRole.
+func RequireRole(minRole Role) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			c, ok := ClaimsFrom(r.Context())
@@ -41,7 +41,7 @@ func RequireRole(min Role) func(http.Handler) http.Handler {
 				http.Error(w, "unauthenticated", http.StatusUnauthorized)
 				return
 			}
-			if !c.HasRole(min) {
+			if !c.HasRole(minRole) {
 				http.Error(w, "forbidden", http.StatusForbidden)
 				return
 			}

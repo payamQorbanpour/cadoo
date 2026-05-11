@@ -72,8 +72,7 @@ func (Tool) Run(ctx context.Context, in tools.Input) (*tools.Result, error) {
 			Body:      renderSuggestionBody(s),
 		})
 	}
-	summary := buildSection(out, inlines)
-	return &tools.Result{Summary: summary, InlineComments: inlines}, nil
+	return &tools.Result{Summary: buildSection(out), InlineComments: inlines}, nil
 }
 
 // renderSuggestionBody formats one inline-comment body. The action lives in
@@ -88,28 +87,17 @@ func renderSuggestionBody(s Suggestion) string {
 }
 
 // buildSection renders the body-only fragment the orchestrator wraps inside
-// the consolidated Cadoo comment. Keeps things short: one-line intent + a
-// bullet list of file anchors so reviewers can jump to inline suggestions.
-func buildSection(out Output, inlines []vcs.InlineComment) string {
+// the consolidated Cadoo comment. Anchor lists are deliberately omitted: the
+// inline suggestions themselves carry file:line, and the dispatcher dedups
+// them across runs via posted_findings — re-listing here would duplicate the
+// inline comments and lie after dedup skips them.
+func buildSection(out Output) string {
 	intent := strings.TrimSpace(out.Summary)
-	if intent == "" && len(inlines) == 0 {
+	if intent != "" {
+		return intent
+	}
+	if len(out.Suggestions) == 0 {
 		return "No high-leverage improvements found in this diff."
 	}
-	var b strings.Builder
-	if intent != "" {
-		b.WriteString(intent)
-		b.WriteString("\n")
-	}
-	if len(inlines) > 0 {
-		fmt.Fprintf(&b, "\n%d inline suggestion(s) posted:\n", len(inlines))
-		for _, c := range inlines {
-			loc := c.File
-			if c.LineStart > 0 {
-				fmt.Fprintf(&b, "- `%s:%d`\n", c.File, c.LineStart)
-				continue
-			}
-			fmt.Fprintf(&b, "- `%s`\n", loc)
-		}
-	}
-	return strings.TrimRight(b.String(), "\n")
+	return ""
 }

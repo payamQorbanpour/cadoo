@@ -15,12 +15,12 @@ import (
 
 // Hit is one search result.
 type Hit struct {
-	DocumentID  string
-	ChunkID     string
-	Title       string
-	Source      string
-	Text        string
-	Distance    float32 // 0..1 cosine distance; lower == more similar
+	DocumentID string
+	ChunkID    string
+	Title      string
+	Source     string
+	Text       string
+	Distance   float32 // 0..1 cosine distance; lower == more similar
 }
 
 // Store is the KB façade. Construct via New.

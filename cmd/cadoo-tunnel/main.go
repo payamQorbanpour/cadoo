@@ -3,12 +3,12 @@
 //
 // Phase 3 ships the on-prem agent half of the protocol:
 //
-//   1. Agent dials the SaaS over HTTPS (outbound only).
-//   2. Sends a hello frame with tenant ID + agent token.
-//   3. Long-polls for forwarded webhook deliveries.
-//   4. POSTs each delivery to the local cadoo-webhook (which already does
-//      signature verification end-to-end since the body and headers are
-//      forwarded verbatim).
+//  1. Agent dials the SaaS over HTTPS (outbound only).
+//  2. Sends a hello frame with tenant ID + agent token.
+//  3. Long-polls for forwarded webhook deliveries.
+//  4. POSTs each delivery to the local cadoo-webhook (which already does
+//     signature verification end-to-end since the body and headers are
+//     forwarded verbatim).
 //
 // The SaaS-side endpoint that fans out webhook deliveries to connected
 // agents is Phase 3.x — for now this binary establishes the connection,
@@ -126,7 +126,7 @@ func (a *agent) pollOnce(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("poll: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNoContent {
 		return nil
@@ -162,7 +162,7 @@ func (a *agent) forward(ctx context.Context, d delivery) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("local forward returned %d: %s", resp.StatusCode, string(body))

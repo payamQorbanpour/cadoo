@@ -41,7 +41,7 @@ func DoJSON(ctx context.Context, client *http.Client, method, url string, body [
 			resp.StatusCode == http.StatusServiceUnavailable ||
 			resp.StatusCode == http.StatusGatewayTimeout {
 			b, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			lastErr = fmt.Errorf("attempt %d/%d: status %d: %s", attempt+1, len(backoffs), resp.StatusCode, string(b))
 			continue
 		}

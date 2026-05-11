@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	glab "github.com/xanzy/go-gitlab"
+	glab "gitlab.com/gitlab-org/api/client-go"
 
 	"github.com/payamqorbanpour/cadoo/internal/vcs"
 )
@@ -46,7 +46,7 @@ func (a *Adapter) Kind() vcs.Kind { return vcs.KindGitLab }
 
 // FetchPullRequest implements vcs.Provider. The PR number is the MR IID.
 func (a *Adapter) FetchPullRequest(ctx context.Context, repo string, number int64) (*vcs.PullRequest, error) {
-	mr, _, err := a.client.MergeRequests.GetMergeRequest(repo, int(number),
+	mr, _, err := a.client.MergeRequests.GetMergeRequest(repo, number,
 		&glab.GetMergeRequestsOptions{}, glab.WithContext(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("get mr %s!%d: %w", repo, number, err)
@@ -54,15 +54,15 @@ func (a *Adapter) FetchPullRequest(ctx context.Context, repo string, number int6
 	return convertMR(mr, repo), nil
 }
 
-// ListChangedFiles implements vcs.Provider via the MR changes endpoint.
+// ListChangedFiles implements vcs.Provider via the MR diffs endpoint.
 func (a *Adapter) ListChangedFiles(ctx context.Context, pr *vcs.PullRequest) ([]vcs.FileChange, error) {
-	changes, _, err := a.client.MergeRequests.GetMergeRequestChanges(pr.RepoFullName, int(pr.Number),
-		&glab.GetMergeRequestChangesOptions{}, glab.WithContext(ctx))
+	diffs, _, err := a.client.MergeRequests.ListMergeRequestDiffs(pr.RepoFullName, pr.Number,
+		&glab.ListMergeRequestDiffsOptions{}, glab.WithContext(ctx))
 	if err != nil {
-		return nil, fmt.Errorf("get mr changes %s!%d: %w", pr.RepoFullName, pr.Number, err)
+		return nil, fmt.Errorf("list mr diffs %s!%d: %w", pr.RepoFullName, pr.Number, err)
 	}
-	out := make([]vcs.FileChange, 0, len(changes.Changes))
-	for _, c := range changes.Changes {
+	out := make([]vcs.FileChange, 0, len(diffs))
+	for _, c := range diffs {
 		path := c.NewPath
 		if path == "" {
 			path = c.OldPath
@@ -92,28 +92,28 @@ func (a *Adapter) ListChangedFiles(ctx context.Context, pr *vcs.PullRequest) ([]
 
 // PostSummaryComment creates a top-level MR note.
 func (a *Adapter) PostSummaryComment(ctx context.Context, pr *vcs.PullRequest, body string) (string, error) {
-	note, _, err := a.client.Notes.CreateMergeRequestNote(pr.RepoFullName, int(pr.Number),
+	note, _, err := a.client.Notes.CreateMergeRequestNote(pr.RepoFullName, pr.Number,
 		&glab.CreateMergeRequestNoteOptions{Body: ptr(body)}, glab.WithContext(ctx))
 	if err != nil {
 		return "", fmt.Errorf("create mr note: %w", err)
 	}
-	return strconv.Itoa(note.ID), nil
+	return strconv.FormatInt(note.ID, 10), nil
 }
 
 // UpdateSummaryComment edits an existing MR note.
 func (a *Adapter) UpdateSummaryComment(ctx context.Context, pr *vcs.PullRequest, id, body string) error {
-	nid, err := strconv.Atoi(id)
+	nid, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
 		return fmt.Errorf("invalid note id %q: %w", id, err)
 	}
-	_, _, err = a.client.Notes.UpdateMergeRequestNote(pr.RepoFullName, int(pr.Number), nid,
+	_, _, err = a.client.Notes.UpdateMergeRequestNote(pr.RepoFullName, pr.Number, nid,
 		&glab.UpdateMergeRequestNoteOptions{Body: ptr(body)}, glab.WithContext(ctx))
 	return err
 }
 
 // EditPullRequestBody replaces the MR description.
 func (a *Adapter) EditPullRequestBody(ctx context.Context, pr *vcs.PullRequest, body string) error {
-	_, _, err := a.client.MergeRequests.UpdateMergeRequest(pr.RepoFullName, int(pr.Number),
+	_, _, err := a.client.MergeRequests.UpdateMergeRequest(pr.RepoFullName, pr.Number,
 		&glab.UpdateMergeRequestOptions{Description: ptr(body)}, glab.WithContext(ctx))
 	if err != nil {
 		return fmt.Errorf("update mr description: %w", err)
@@ -129,7 +129,7 @@ func (a *Adapter) PostInlineComments(ctx context.Context, pr *vcs.PullRequest, c
 	if len(comments) == 0 {
 		return nil
 	}
-	mr, _, err := a.client.MergeRequests.GetMergeRequest(pr.RepoFullName, int(pr.Number),
+	mr, _, err := a.client.MergeRequests.GetMergeRequest(pr.RepoFullName, pr.Number,
 		&glab.GetMergeRequestsOptions{}, glab.WithContext(ctx))
 	if err != nil {
 		return fmt.Errorf("get mr for diff refs: %w", err)
@@ -157,11 +157,11 @@ func (a *Adapter) PostInlineComments(ctx context.Context, pr *vcs.PullRequest, c
 				PositionType: ptr("text"),
 				NewPath:      ptr(c.File),
 				OldPath:      ptr(c.File),
-				NewLine:      ptr(line),
+				NewLine:      ptr(int64(line)),
 			},
 		}
 		if _, _, err := a.client.Discussions.CreateMergeRequestDiscussion(
-			pr.RepoFullName, int(pr.Number), opts, glab.WithContext(ctx),
+			pr.RepoFullName, pr.Number, opts, glab.WithContext(ctx),
 		); err != nil && firstErr == nil {
 			firstErr = fmt.Errorf("create discussion at %s:%d: %w", c.File, line, err)
 		}

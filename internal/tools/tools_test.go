@@ -7,7 +7,7 @@ import (
 
 type stub struct{ name string }
 
-func (s stub) Name() string                                  { return s.name }
+func (s stub) Name() string                                    { return s.name }
 func (s stub) Run(_ context.Context, _ Input) (*Result, error) { return &Result{}, nil }
 
 func TestRegistryRegisterAndGet(t *testing.T) {

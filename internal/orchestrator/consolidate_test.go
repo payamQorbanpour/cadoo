@@ -12,8 +12,8 @@ func TestRenderConsolidatedOrdersReviewFirst(t *testing.T) {
 		{Tool: "improve", Body: "imp"},
 		{Tool: "review", Body: "rev"},
 	})
-	if !strings.Contains(got, "## Cadoo") {
-		t.Errorf("missing wrapper header: %s", got)
+	if !strings.Contains(got, "Cadoo") || !strings.Contains(got, brandAvatar) {
+		t.Errorf("missing branded wrapper header: %s", got)
 	}
 	if i, j := strings.Index(got, "Review"), strings.Index(got, "Suggested improvements"); i < 0 || j < 0 || i > j {
 		t.Errorf("review section should appear before improve: %s", got)

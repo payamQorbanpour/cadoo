@@ -15,11 +15,13 @@ func TestFindLinkedFetchesEachKey(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(jiraIssue{
 				Key: "JIRA-1",
 				Fields: struct {
-					Summary  string                            `json:"summary"`
-					Status   struct{ Name string }              `json:"status"`
-					Assignee *struct{ DisplayName string `json:"displayName"` } `json:"assignee"`
-					Labels   []string                          `json:"labels"`
-					Updated  string                            `json:"updated"`
+					Summary  string                `json:"summary"`
+					Status   struct{ Name string } `json:"status"`
+					Assignee *struct {
+						DisplayName string `json:"displayName"`
+					} `json:"assignee"`
+					Labels  []string `json:"labels"`
+					Updated string   `json:"updated"`
 				}{Summary: "first", Status: struct{ Name string }{Name: "Open"}},
 			})
 		case "/rest/api/3/issue/JIRA-2":

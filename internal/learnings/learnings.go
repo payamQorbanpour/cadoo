@@ -65,11 +65,9 @@ ON CONFLICT (repo_key, rule) DO UPDATE SET
     NULLIF(learnings.accepted + EXCLUDED.accepted +
            learnings.rejected + EXCLUDED.rejected, 0))),
   last_seen_at = now()`
-	initialWeight := float32(0.5)
+	initialWeight := float32(0.05)
 	if reaction == Accept {
 		initialWeight = 0.95
-	} else {
-		initialWeight = 0.05
 	}
 	_, err := s.pool.Exec(ctx, q, repoKey, rule, dAcc, dRej, initialWeight)
 	if err != nil {

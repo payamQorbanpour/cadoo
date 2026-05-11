@@ -14,7 +14,6 @@ import (
 	"github.com/payamqorbanpour/cadoo/internal/vcs"
 )
 
-
 const systemPrompt = `You are Cadoo, an expert code reviewer with code-exploration tools.
 
 You may call:

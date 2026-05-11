@@ -57,7 +57,7 @@ func (t *Tracker) FindLinked(ctx context.Context, prTitle, prBody string) ([]iss
 type jiraIssue struct {
 	Key    string `json:"key"`
 	Fields struct {
-		Summary  string `json:"summary"`
+		Summary  string                `json:"summary"`
 		Status   struct{ Name string } `json:"status"`
 		Assignee *struct {
 			DisplayName string `json:"displayName"`
@@ -87,7 +87,7 @@ func (t *Tracker) fetchOne(ctx context.Context, key string) (*issuetrackers.Issu
 	if err != nil {
 		return nil, fmt.Errorf("jira fetch %s: %w", key, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("jira: %s not found", key)
 	}

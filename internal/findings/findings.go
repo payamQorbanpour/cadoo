@@ -42,7 +42,7 @@ func (s *Store) Enabled() bool { return s != nil && s.pool != nil }
 // rephrases a finding will surface the rephrasing as a fresh signal.
 func Fingerprint(tool string, c vcs.InlineComment) string {
 	h := sha1.New()
-	fmt.Fprintf(h, "%s\x00%s\x00%d\x00%d\x00%s\x00%s",
+	_, _ = fmt.Fprintf(h, "%s\x00%s\x00%d\x00%d\x00%s\x00%s",
 		tool, c.File, c.LineStart, c.LineEnd, c.Severity, c.Body)
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }

@@ -44,8 +44,8 @@ func makeTarGz(t *testing.T, files map[string]string) []byte {
 
 func TestOpenExtractsAndFlattens(t *testing.T) {
 	tarData := makeTarGz(t, map[string]string{
-		"main.go":       "package main\n",
-		"sub/foo.txt":   "hello\n",
+		"main.go":     "package main\n",
+		"sub/foo.txt": "hello\n",
 	})
 	ws, err := Open(context.Background(), &bytesArchiver{data: tarData}, "o/r", "abc")
 	if err != nil {

@@ -467,7 +467,7 @@ func (d *Dispatcher) runLinters(ctx context.Context, provider vcs.Provider, pr *
 		slog.Debug("workspace open failed; skipping lint", "err", err)
 		return nil
 	}
-	defer ws.Close()
+	defer func() { _ = ws.Close() }()
 
 	byExt := map[string][]string{}
 	for _, f := range files {

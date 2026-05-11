@@ -190,9 +190,9 @@ func silentTitle(inline []vcs.InlineComment) string {
 
 func convertFindings(findings []Finding, cfg config.Repo) []vcs.InlineComment {
 	threshold := severityRank(cfg.Review.SeverityThreshold)
-	max := cfg.Review.MaxComments
-	if max <= 0 {
-		max = 30
+	maxComments := cfg.Review.MaxComments
+	if maxComments <= 0 {
+		maxComments = 30
 	}
 	out := make([]vcs.InlineComment, 0, len(findings))
 	for _, f := range findings {
@@ -211,7 +211,7 @@ func convertFindings(findings []Finding, cfg config.Repo) []vcs.InlineComment {
 			Body:      body,
 			Severity:  sev,
 		})
-		if len(out) >= max {
+		if len(out) >= maxComments {
 			break
 		}
 	}

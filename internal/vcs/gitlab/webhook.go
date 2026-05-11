@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	glab "github.com/xanzy/go-gitlab"
+	glab "gitlab.com/gitlab-org/api/client-go"
 )
 
 // VerifyToken returns nil if the X-Gitlab-Token header matches the secret

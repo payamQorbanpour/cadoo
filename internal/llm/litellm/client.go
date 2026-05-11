@@ -35,12 +35,12 @@ func New(baseURL, apiKey string) *Client {
 }
 
 type chatRequestPayload struct {
-	Model       string          `json:"model"`
-	Messages    []chatMessage   `json:"messages"`
-	Tools       []chatTool      `json:"tools,omitempty"`
-	Temperature float32         `json:"temperature,omitempty"`
-	MaxTokens   int             `json:"max_tokens,omitempty"`
-	Stream      bool            `json:"stream,omitempty"`
+	Model       string        `json:"model"`
+	Messages    []chatMessage `json:"messages"`
+	Tools       []chatTool    `json:"tools,omitempty"`
+	Temperature float32       `json:"temperature,omitempty"`
+	MaxTokens   int           `json:"max_tokens,omitempty"`
+	Stream      bool          `json:"stream,omitempty"`
 }
 
 type chatMessage struct {
@@ -133,7 +133,7 @@ func (c *Client) Chat(ctx context.Context, req llm.ChatRequest) (*llm.ChatRespon
 	if err != nil {
 		return nil, fmt.Errorf("chat completion %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(resp.Body)

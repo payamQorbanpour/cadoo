@@ -44,7 +44,7 @@ func Open(ctx context.Context, archiver RepoArchiver, repo, ref string) (*Worksp
 	if err != nil {
 		return nil, fmt.Errorf("fetch archive %s@%s: %w", repo, ref, err)
 	}
-	defer src.Close()
+	defer func() { _ = src.Close() }()
 
 	dir, err := os.MkdirTemp("", "cadoo-ws-*")
 	if err != nil {
@@ -69,7 +69,7 @@ func extractTarGz(r io.Reader, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 	tr := tar.NewReader(gz)
 	cleanDest := filepath.Clean(dest) + string(os.PathSeparator)
 	for {
