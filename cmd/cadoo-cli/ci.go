@@ -126,6 +126,8 @@ func ciCmd(args []string) {
 	defaultRepo := envOr("CI_PROJECT_DIR", envOr("GITHUB_WORKSPACE", "."))
 	repoDir := fs.String("repo", defaultRepo,
 		"path to the checked-out repo root (used to locate .cadoo.yaml)")
+	reportStatus := fs.Bool("status", parseBoolEnv("CADOO_REPORT_STATUS", false),
+		"post a commit status / check-run on the head SHA (default: false; can also be set via CADOO_REPORT_STATUS)")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
@@ -167,11 +169,12 @@ func ciCmd(args []string) {
 
 	// Stateless dispatcher: no DB, no audit, no KB.
 	d := &orchestrator.Dispatcher{
-		LLM:      litellm.New(llmURL, llmKey),
-		VCSPool:  map[vcs.Kind]vcs.Provider{target.Provider: provider},
-		Model:    model,
-		BaseCfg:  repoCfg,
-		Registry: orchestrator.DefaultRegistry(),
+		LLM:          litellm.New(llmURL, llmKey),
+		VCSPool:      map[vcs.Kind]vcs.Provider{target.Provider: provider},
+		Model:        model,
+		BaseCfg:      repoCfg,
+		Registry:     orchestrator.DefaultRegistry(),
+		ReportStatus: *reportStatus,
 	}
 
 	ctx := context.Background()
@@ -272,6 +275,22 @@ func splitCSV(s string) []string {
 func envOr(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return fallback
+}
+
+// parseBoolEnv reads a boolean env var. Accepts "1/0", "true/false", "yes/no",
+// "on/off" (case-insensitive). Empty or unparseable falls back to the default.
+func parseBoolEnv(key string, fallback bool) bool {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return fallback
+	}
+	switch strings.ToLower(v) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
 	}
 	return fallback
 }

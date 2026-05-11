@@ -115,6 +115,14 @@ type Dispatcher struct {
 	// trading one cheap LLM call for higher KB recall.
 	KBDistiller *querydistill.Distiller
 
+	// ReportStatus controls whether tool-emitted CheckRuns are posted to
+	// the VCS as commit statuses / check-runs. Zero value (false) suppresses
+	// them — the dispatcher still posts the inline review and summary, but
+	// nothing lands on the head SHA that a branch-protection rule could
+	// require. Server callers (webhook/worker) opt in explicitly to keep
+	// today's SaaS behavior.
+	ReportStatus bool
+
 	MaxTokens     int
 	PerFileTokens int
 }
@@ -279,14 +287,16 @@ func (d *Dispatcher) applyResult(ctx context.Context, provider vcs.Provider, pr 
 	if len(res.InlineComments) > 0 {
 		d.postInline(ctx, provider, pr, key, tool, res.InlineComments)
 	}
-	if res.CheckRun != nil {
-		if err := provider.UpsertCheckRun(ctx, pr, *res.CheckRun); err != nil {
-			slog.Error("upsert check run", "err", err, "pr", pr.URL)
+	if d.ReportStatus {
+		if res.CheckRun != nil {
+			if err := provider.UpsertCheckRun(ctx, pr, *res.CheckRun); err != nil {
+				slog.Error("upsert check run", "err", err, "pr", pr.URL)
+			}
 		}
-	}
-	for _, run := range res.CheckRuns {
-		if err := provider.UpsertCheckRun(ctx, pr, run); err != nil {
-			slog.Error("upsert extra check run", "err", err, "name", run.Name, "pr", pr.URL)
+		for _, run := range res.CheckRuns {
+			if err := provider.UpsertCheckRun(ctx, pr, run); err != nil {
+				slog.Error("upsert extra check run", "err", err, "name", run.Name, "pr", pr.URL)
+			}
 		}
 	}
 	if res.EditPRBody != nil {
@@ -442,6 +452,9 @@ func (d *Dispatcher) perFileTokens() int {
 }
 
 func (d *Dispatcher) failCheck(ctx context.Context, provider vcs.Provider, pr *vcs.PullRequest, err error) {
+	if !d.ReportStatus {
+		return
+	}
 	_ = provider.UpsertCheckRun(ctx, pr, vcs.CheckRun{
 		Name:    CheckRunName,
 		Status:  vcs.CheckFailed,

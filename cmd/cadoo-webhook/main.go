@@ -181,11 +181,12 @@ func buildDispatcher(s *settings.Settings, pool *pgxpool.Pool) (*orchestrator.Di
 		return nil, nil //nolint:nilnil
 	}
 	d := &orchestrator.Dispatcher{
-		LLM:      litellm.New(s.LLMGatewayURL, s.LLMGatewayAPIKey),
-		VCSPool:  pool2,
-		Model:    s.DefaultModel,
-		BaseCfg:  config.Default(),
-		Registry: orchestrator.DefaultRegistry(),
+		LLM:          litellm.New(s.LLMGatewayURL, s.LLMGatewayAPIKey),
+		VCSPool:      pool2,
+		Model:        s.DefaultModel,
+		BaseCfg:      config.Default(),
+		Registry:     orchestrator.DefaultRegistry(),
+		ReportStatus: true,
 	}
 	if pool != nil {
 		embedder := embed.New(s.LLMGatewayURL, s.LLMGatewayAPIKey, "")
