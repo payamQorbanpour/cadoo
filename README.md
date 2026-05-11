@@ -8,8 +8,6 @@
 
 Cadoo posts inline review comments, generates PR descriptions, suggests improvements, and gates merges via a status check — across GitHub, GitHub Enterprise Server, and GitLab. Self-host on your own cluster or run against the SaaS.
 
-**Status:** Production-ready. Feature set complete; deferral backlog tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
-
 ---
 
 ## Features
@@ -185,10 +183,6 @@ Deploy the Helm chart in [`deploy/helm/cadoo`](deploy/helm/cadoo) against any Ku
 - Either inbound webhooks from your VCS, or `cadoo-tunnel` for outbound-only deployments.
 
 The chart includes PodDisruptionBudget, NetworkPolicy, and a Prometheus ServiceMonitor. A no-egress mode is available for air-gapped environments.
-
-## Roadmap
-
-See [docs/ROADMAP.md](docs/ROADMAP.md) for the full Phase 0 → Phase 8 plan and current deliverables.
 
 ## Contributing
 
