@@ -17,6 +17,7 @@ Cadoo posts inline review comments, generates PR descriptions, suggests improvem
 - **Multi-VCS** — GitHub.com, GitHub Enterprise Server, GitLab (self-managed + gitlab.com). Reverse-tunnel agent (`cadoo-tunnel`) lets SaaS reach private VCS without inbound firewall rules.
 - **Multi-provider LLM** — talks to any [LiteLLM](https://github.com/BerriAI/litellm)-compatible endpoint, so you can route per-tenant to OpenAI, Anthropic, Bedrock, Azure, local Ollama, etc.
 - **Idempotent comments** — fingerprinted findings so resyncs update existing threads instead of spamming new ones.
+- **File Walkthrough** — `/describe` buckets every changed file into 7 fixed categories (Enhancement, Bug fix, Tests, Documentation, Configuration changes, Formatting, Additional files) with per-file summaries and `+adds/-dels` counts, rendered as a collapsible table inline in the PR description.
 - **Per-repo config** — `.cadoo.yaml` loaded from the PR head; controls which tools auto-run on which events and paths.
 - **Sandboxed static analysis** — runs 10–15 linters inside isolated containers, results fused into the model's context.
 - **Knowledge base + learnings** — pgvector-backed; `/learn` and `/unlearn` teach Cadoo team-specific rules that persist across reviews.
@@ -50,6 +51,16 @@ on the /v2/users endpoint to align with the org-wide auth rotation.
 - Drop the now-unused `legacyTokenFromCtx` helper
 - Add table-driven tests covering 401 / 403 / scope-mismatch paths
 - Update `docs/auth.md` with the new scope name
+
+<details><summary><strong>File Walkthrough</strong></summary>
+
+| | Relevant files |
+|---|---|
+| **Enhancement** | <details><summary>2 files</summary> `routes/users.go` — Swap to scopedauth middleware (+18/-9)<br>`internal/authn/legacy.go` — Drop unused helper (+0/-24) </details> |
+| **Tests** | <details><summary>1 files</summary> `routes/users_test.go` — Cover 401/403/scope-mismatch (+62/-3) </details> |
+| **Documentation** | <details><summary>1 files</summary> `docs/auth.md` — Document new scope name (+5/-1) </details> |
+
+</details>
 
 **Risks:** Callers still on legacy tokens will start receiving 403 — feature-flagged behind `auth.scoped_v2`.
 <!-- cadoo:pr-body:end -->
