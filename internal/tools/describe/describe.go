@@ -11,14 +11,8 @@ import (
 	"github.com/payamqorbanpour/cadoo/internal/vcs"
 )
 
-// Inline icon markdown rendered next to each subsection header. Differentiates
-// the analyze/risk callouts at a glance without forcing readers to expand
-// every collapsible block.
-const (
-	analyzeIcon = `<img src="https://raw.githubusercontent.com/payamqorbanpour/cadoo/main/docs/assets/Magnifier.png" height="20" align="absmiddle" alt="Analyze">`
-	riskIcon    = `<img src="https://raw.githubusercontent.com/payamqorbanpour/cadoo/main/docs/assets/Risk.png" height="20" align="absmiddle" alt="Risks">`
-	filesIcon   = `<img src="https://raw.githubusercontent.com/payamqorbanpour/cadoo/main/docs/assets/Files.png" height="20" align="absmiddle" alt="Walkthrough">`
-)
+// filesIcon is rendered next to the File Walkthrough header.
+const filesIcon = `<img src="https://raw.githubusercontent.com/payamqorbanpour/cadoo/main/docs/assets/Files.png" height="20" align="absmiddle" alt="Walkthrough">`
 
 // labelEnhancement and siblings are the fixed walkthrough categories. Order
 // here is the render order in the table. "Additional files" is the catch-all
@@ -51,7 +45,7 @@ Respond with ONLY a JSON object:
   "intent":  "<one-sentence summary of what this PR does and why>",
   "type":    "<comma-separated labels: Bug fix | Enhancement | Refactor | Tests | Docs | Chore>",
   "changes": [ "<short bullet — one per meaningful change, ≤90 chars>" ],
-  "risks":   "<one sentence; '' if low-risk>",
+  "risks":   [ "<short bullet — one per risk, ≤90 chars; empty array if low-risk>" ],
   "walkthrough": [
     {
       "path":        "<file path exactly as listed under ## Diff>",
@@ -81,7 +75,7 @@ type Output struct {
 	Intent      string            `json:"intent"`
 	Type        string            `json:"type"`
 	Changes     []string          `json:"changes"`
-	Risks       string            `json:"risks"`
+	Risks       []string          `json:"risks"`
 	Walkthrough []WalkthroughFile `json:"walkthrough"`
 }
 
@@ -123,8 +117,7 @@ func buildSection(o Output, files []vcs.FileChange) string {
 		b.WriteString("\n\n")
 	}
 	if len(o.Changes) > 0 {
-		b.WriteString(analyzeIcon)
-		b.WriteString(" **Changes**\n\n")
+		b.WriteString("**Changes**\n\n")
 		for _, c := range o.Changes {
 			c = strings.TrimSpace(c)
 			if c == "" {
@@ -140,10 +133,13 @@ func buildSection(o Output, files []vcs.FileChange) string {
 		b.WriteString(walk)
 		b.WriteString("\n")
 	}
-	if r := strings.TrimSpace(o.Risks); r != "" {
-		b.WriteString(riskIcon)
-		b.WriteString(" **Risks:** ")
-		b.WriteString(r)
+	if risks := nonEmpty(o.Risks); len(risks) > 0 {
+		b.WriteString("**Risks**\n\n")
+		for _, r := range risks {
+			b.WriteString("- ")
+			b.WriteString(r)
+			b.WriteString("\n")
+		}
 		b.WriteString("\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
@@ -248,6 +244,18 @@ func canonicalLabel(raw string) string {
 		return labelAdditional
 	}
 	return ""
+}
+
+func nonEmpty(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
 }
 
 func displayName(path string) string {

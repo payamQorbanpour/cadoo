@@ -102,7 +102,7 @@ func TestBuildSectionAppendsWalkthroughBetweenChangesAndRisks(t *testing.T) {
 		Intent:  "Tighten the EditKnowledgeBase path.",
 		Type:    "Enhancement",
 		Changes: []string{"Wire autoRag flag through service"},
-		Risks:   "Low — covered by new tests.",
+		Risks:   []string{"Low — covered by new tests."},
 		Walkthrough: []WalkthroughFile{
 			{Path: "kb.go", Label: "Enhancement", Description: "Add flag"},
 		},
@@ -112,7 +112,7 @@ func TestBuildSectionAppendsWalkthroughBetweenChangesAndRisks(t *testing.T) {
 
 	changesIdx := strings.Index(got, "**Changes**")
 	walkIdx := strings.Index(got, "File Walkthrough")
-	risksIdx := strings.Index(got, "**Risks:**")
+	risksIdx := strings.Index(got, "**Risks**")
 	if changesIdx < 0 || walkIdx < 0 || risksIdx < 0 {
 		t.Fatalf("missing sections:\n%s", got)
 	}
