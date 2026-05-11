@@ -5,6 +5,7 @@ package improve
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/payamqorbanpour/cadoo/internal/tools"
 	"github.com/payamqorbanpour/cadoo/internal/vcs"
@@ -14,13 +15,13 @@ const systemPrompt = `You are Cadoo. Suggest concrete, high-leverage improvement
 
 Respond with ONLY a JSON object:
 {
-  "summary": "<short overview of the suggested improvements>",
+  "summary": "<one-sentence overview of the suggestion set>",
   "suggestions": [
     {
-      "file": "<path as shown in the diff>",
-      "line_start": <int, 1-based, line in the new file>,
+      "file":       "<path as shown in the diff>",
+      "line_start": <int, 1-based new-file line>,
       "line_end":   <int, end of the range to replace; equal to line_start for single line>,
-      "rationale":  "<short explanation of why this is better>",
+      "rationale":  "<≤90-char imperative-mood action — what to do, not why. Example: 'Use pinned digest instead of latest'>",
       "code":       "<exact replacement for the line range — no diff markers, no surrounding lines>"
     }
   ]
@@ -29,6 +30,7 @@ Respond with ONLY a JSON object:
 Rules:
 - Only suggest changes that touch lines present in the diff.
 - "code" must be a complete replacement for the [line_start, line_end] range.
+- "rationale" is the one-line action a reviewer would write in a thread: terse, imperative, no explanation paragraphs.
 - Prefer 2-5 high-leverage suggestions over many trivial ones.
 - If you can't propose a concrete improvement, return suggestions: [].`
 
@@ -63,19 +65,51 @@ func (Tool) Run(ctx context.Context, in tools.Input) (*tools.Result, error) {
 	}
 	inlines := make([]vcs.InlineComment, 0, len(out.Suggestions))
 	for _, s := range out.Suggestions {
-		body := fmt.Sprintf("**Suggestion** — %s\n\n```suggestion\n%s\n```", s.Rationale, s.Code)
 		inlines = append(inlines, vcs.InlineComment{
 			File:      s.File,
 			LineStart: s.LineStart,
 			LineEnd:   s.LineEnd,
-			Body:      body,
+			Body:      renderSuggestionBody(s),
 		})
 	}
-	summary := out.Summary
-	if summary == "" && len(inlines) == 0 {
-		summary = "## Cadoo: no high-leverage improvements suggested for this diff."
-	} else if summary != "" {
-		summary = "## Cadoo: suggested improvements\n\n" + summary
-	}
+	summary := buildSection(out, inlines)
 	return &tools.Result{Summary: summary, InlineComments: inlines}, nil
+}
+
+// renderSuggestionBody formats one inline-comment body. The action lives in
+// the bullet — reviewers can read it without expanding the suggestion block;
+// the suggestion block underneath gives them one-click apply.
+func renderSuggestionBody(s Suggestion) string {
+	action := strings.TrimSpace(s.Rationale)
+	if action == "" {
+		action = "Apply suggested change."
+	}
+	return fmt.Sprintf("**Suggestions:**\n- %s\n\n```suggestion\n%s\n```", action, s.Code)
+}
+
+// buildSection renders the body-only fragment the orchestrator wraps inside
+// the consolidated Cadoo comment. Keeps things short: one-line intent + a
+// bullet list of file anchors so reviewers can jump to inline suggestions.
+func buildSection(out Output, inlines []vcs.InlineComment) string {
+	intent := strings.TrimSpace(out.Summary)
+	if intent == "" && len(inlines) == 0 {
+		return "No high-leverage improvements found in this diff."
+	}
+	var b strings.Builder
+	if intent != "" {
+		b.WriteString(intent)
+		b.WriteString("\n")
+	}
+	if len(inlines) > 0 {
+		fmt.Fprintf(&b, "\n%d inline suggestion(s) posted:\n", len(inlines))
+		for _, c := range inlines {
+			loc := c.File
+			if c.LineStart > 0 {
+				fmt.Fprintf(&b, "- `%s:%d`\n", c.File, c.LineStart)
+				continue
+			}
+			fmt.Fprintf(&b, "- `%s`\n", loc)
+		}
+	}
+	return strings.TrimRight(b.String(), "\n")
 }

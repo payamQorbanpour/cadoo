@@ -111,6 +111,16 @@ func (a *Adapter) UpdateSummaryComment(ctx context.Context, pr *vcs.PullRequest,
 	return err
 }
 
+// EditPullRequestBody replaces the MR description.
+func (a *Adapter) EditPullRequestBody(ctx context.Context, pr *vcs.PullRequest, body string) error {
+	_, _, err := a.client.MergeRequests.UpdateMergeRequest(pr.RepoFullName, int(pr.Number),
+		&glab.UpdateMergeRequestOptions{Description: ptr(body)}, glab.WithContext(ctx))
+	if err != nil {
+		return fmt.Errorf("update mr description: %w", err)
+	}
+	return nil
+}
+
 // PostInlineComments creates one MR discussion per inline comment, anchored
 // to a position object built from the MR's diff_refs. Failures on individual
 // comments are returned as the first error after a best-effort attempt at

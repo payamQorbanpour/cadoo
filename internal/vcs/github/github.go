@@ -160,6 +160,20 @@ func (a *Adapter) UpdateSummaryComment(ctx context.Context, pr *vcs.PullRequest,
 	return err
 }
 
+// EditPullRequestBody replaces the PR description.
+func (a *Adapter) EditPullRequestBody(ctx context.Context, pr *vcs.PullRequest, body string) error {
+	owner, name, err := splitRepo(pr.RepoFullName)
+	if err != nil {
+		return err
+	}
+	_, _, err = a.client.PullRequests.Edit(ctx, owner, name, int(pr.Number),
+		&gogithub.PullRequest{Body: ptr(body)})
+	if err != nil {
+		return fmt.Errorf("edit pr body: %w", err)
+	}
+	return nil
+}
+
 // PostInlineComments creates a single PR review with all inline comments.
 // Multi-line comments use start_line/line on the RIGHT side of the diff.
 func (a *Adapter) PostInlineComments(ctx context.Context, pr *vcs.PullRequest, comments []vcs.InlineComment) error {
