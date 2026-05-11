@@ -1,43 +1,89 @@
 package main
 
-import "testing"
+import (
+	"testing"
 
-func TestParseMRURL(t *testing.T) {
+	"github.com/payamqorbanpour/cadoo/internal/vcs"
+)
+
+func TestParseTargetURL(t *testing.T) {
 	cases := []struct {
-		name        string
-		in          string
-		wantBase    string
-		wantProject string
-		wantIID     int64
-		wantErr     bool
+		name         string
+		in           string
+		wantProvider vcs.Kind
+		wantBase     string
+		wantAPIBase  string
+		wantProject  string
+		wantNumber   int64
+		wantErr      bool
 	}{
 		{
-			name:        "gitlab.com modern",
-			in:          "https://gitlab.com/group/project/-/merge_requests/42",
-			wantBase:    "https://gitlab.com",
-			wantProject: "group/project",
-			wantIID:     42,
+			name:         "gitlab.com modern",
+			in:           "https://gitlab.com/group/project/-/merge_requests/42",
+			wantProvider: vcs.KindGitLab,
+			wantBase:     "https://gitlab.com",
+			wantAPIBase:  "https://gitlab.com/api/v4",
+			wantProject:  "group/project",
+			wantNumber:   42,
 		},
 		{
-			name:        "self-managed nested groups",
-			in:          "https://gitlab.example.com/group/subgroup/project/-/merge_requests/7",
-			wantBase:    "https://gitlab.example.com",
-			wantProject: "group/subgroup/project",
-			wantIID:     7,
+			name:         "self-managed nested groups",
+			in:           "https://gitlab.example.com/group/subgroup/project/-/merge_requests/7",
+			wantProvider: vcs.KindGitLab,
+			wantBase:     "https://gitlab.example.com",
+			wantAPIBase:  "https://gitlab.example.com/api/v4",
+			wantProject:  "group/subgroup/project",
+			wantNumber:   7,
 		},
 		{
-			name:        "legacy without /-/",
-			in:          "https://gitlab.example.com/group/project/merge_requests/3",
-			wantBase:    "https://gitlab.example.com",
-			wantProject: "group/project",
-			wantIID:     3,
+			name:         "legacy without /-/",
+			in:           "https://gitlab.example.com/group/project/merge_requests/3",
+			wantProvider: vcs.KindGitLab,
+			wantBase:     "https://gitlab.example.com",
+			wantAPIBase:  "https://gitlab.example.com/api/v4",
+			wantProject:  "group/project",
+			wantNumber:   3,
 		},
 		{
-			name:        "trailing /diffs",
-			in:          "https://gitlab.com/g/p/-/merge_requests/12/diffs",
-			wantBase:    "https://gitlab.com",
-			wantProject: "g/p",
-			wantIID:     12,
+			name:         "gitlab trailing /diffs",
+			in:           "https://gitlab.com/g/p/-/merge_requests/12/diffs",
+			wantProvider: vcs.KindGitLab,
+			wantBase:     "https://gitlab.com",
+			wantAPIBase:  "https://gitlab.com/api/v4",
+			wantProject:  "g/p",
+			wantNumber:   12,
+		},
+		{
+			name:         "github.com pull",
+			in:           "https://github.com/owner/repo/pull/42",
+			wantProvider: vcs.KindGitHub,
+			wantBase:     "https://github.com",
+			wantAPIBase:  "",
+			wantProject:  "owner/repo",
+			wantNumber:   42,
+		},
+		{
+			name:         "github.com trailing /files",
+			in:           "https://github.com/owner/repo/pull/12/files",
+			wantProvider: vcs.KindGitHub,
+			wantBase:     "https://github.com",
+			wantAPIBase:  "",
+			wantProject:  "owner/repo",
+			wantNumber:   12,
+		},
+		{
+			name:         "GHES pull",
+			in:           "https://ghe.example.com/owner/repo/pull/7",
+			wantProvider: vcs.KindGitHubEnterprise,
+			wantBase:     "https://ghe.example.com",
+			wantAPIBase:  "https://ghe.example.com/api/v3",
+			wantProject:  "owner/repo",
+			wantNumber:   7,
+		},
+		{
+			name:    "github too many path segments",
+			in:      "https://github.com/owner/group/repo/pull/1",
+			wantErr: true,
 		},
 		{
 			name:    "missing iid",
@@ -45,13 +91,18 @@ func TestParseMRURL(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "not an mr url",
+			name:    "not an mr or pr url",
 			in:      "https://gitlab.com/g/p/-/issues/1",
 			wantErr: true,
 		},
 		{
 			name:    "non-numeric iid",
 			in:      "https://gitlab.com/g/p/-/merge_requests/abc",
+			wantErr: true,
+		},
+		{
+			name:    "non-numeric pr number",
+			in:      "https://github.com/owner/repo/pull/abc",
 			wantErr: true,
 		},
 		{
@@ -62,7 +113,7 @@ func TestParseMRURL(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := parseMRURL(tc.in)
+			got, err := parseTargetURL(tc.in)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got %+v", got)
@@ -72,17 +123,20 @@ func TestParseMRURL(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
+			if got.Provider != tc.wantProvider {
+				t.Errorf("Provider = %q, want %q", got.Provider, tc.wantProvider)
+			}
 			if got.BaseURL != tc.wantBase {
 				t.Errorf("BaseURL = %q, want %q", got.BaseURL, tc.wantBase)
 			}
-			if got.APIBaseURL != tc.wantBase+"/api/v4" {
-				t.Errorf("APIBaseURL = %q, want %q", got.APIBaseURL, tc.wantBase+"/api/v4")
+			if got.APIBaseURL != tc.wantAPIBase {
+				t.Errorf("APIBaseURL = %q, want %q", got.APIBaseURL, tc.wantAPIBase)
 			}
 			if got.ProjectPath != tc.wantProject {
 				t.Errorf("ProjectPath = %q, want %q", got.ProjectPath, tc.wantProject)
 			}
-			if got.IID != tc.wantIID {
-				t.Errorf("IID = %d, want %d", got.IID, tc.wantIID)
+			if got.Number != tc.wantNumber {
+				t.Errorf("Number = %d, want %d", got.Number, tc.wantNumber)
 			}
 		})
 	}

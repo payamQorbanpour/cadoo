@@ -1,0 +1,57 @@
+# Cadoo CI-mode: AI code review inside a GitHub Actions workflow.
+#
+# Copy this file to `.github/workflows/cadoo-review.yml` in your repo. No
+# server, no webhook, no GitHub App install — everything happens inside
+# one Actions job. Cadoo posts as `github-actions[bot]` (the identity that
+# owns the runner-injected GITHUB_TOKEN).
+#
+# Prerequisites (Repo Settings → Secrets and variables → Actions):
+#   LLM_GATEWAY_URL       OpenAI-compatible base URL (must end in /v1).
+#                         For a self-hosted LiteLLM proxy, this is its
+#                         /v1 endpoint. For Anthropic/OpenAI direct, use
+#                         their respective API base URLs.
+#   LLM_GATEWAY_API_KEY   The matching API key.
+#
+# Optional repo variables:
+#   CADOO_DEFAULT_MODEL   Defaults to "claude-sonnet-4-6".
+#   CADOO_TOOLS           Comma-separated tools to run. Defaults to
+#                         "describe,review,improve".
+#
+# The Actions-injected GITHUB_TOKEN needs these permissions (declared
+# below on the job) for the three default tools:
+#   contents:       read   — fetch the PR archive + .cadoo.yaml at head
+#   pull-requests:  write  — post the description and review comments
+#   checks:         write  — publish the `cadoo/review` check run
+#   issues:         write  — required for issue-comment endpoints used
+#                            by PostSummaryComment / UpdateSummaryComment
+
+name: cadoo-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  cadoo-review:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
+      issues: write
+    container:
+      image: ghcr.io/payamqorbanpour/cadoo-cli:latest
+    steps:
+      - name: Run cadoo
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LLM_GATEWAY_URL: ${{ secrets.LLM_GATEWAY_URL }}
+          LLM_GATEWAY_API_KEY: ${{ secrets.LLM_GATEWAY_API_KEY }}
+          CADOO_DEFAULT_MODEL: ${{ vars.CADOO_DEFAULT_MODEL }}
+          CADOO_TOOLS: ${{ vars.CADOO_TOOLS }}
+        run: |
+          set -e
+          cadoo ci \
+            --pr "${{ github.event.pull_request.html_url }}" \
+            --tools "${CADOO_TOOLS:-describe,review,improve}"

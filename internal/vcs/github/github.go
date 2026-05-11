@@ -1,6 +1,7 @@
 // Package github implements vcs.Provider against GitHub.com and GitHub
-// Enterprise Server. Authentication is via GitHub App installation tokens
-// (bradleyfalzon/ghinstallation).
+// Enterprise Server. Authentication is either a GitHub App installation
+// (bradleyfalzon/ghinstallation, used by cadoo-webhook) or a bearer token
+// such as the Actions-injected GITHUB_TOKEN / a PAT (used by `cadoo ci`).
 package github
 
 import (
@@ -18,10 +19,17 @@ import (
 	"github.com/payamqorbanpour/cadoo/internal/vcs"
 )
 
-// Config configures the adapter.
+// Config configures the adapter. Exactly one auth mode must be set: either
+// Token (bearer-token / PAT / Actions GITHUB_TOKEN) or the AppID +
+// InstallationID + PrivateKeyPEM triple. Token wins if both are present.
 type Config struct {
-	BaseURL        string // empty for github.com; e.g. "https://ghe.example.com/api/v3" for GHES
-	UploadURL      string // optional GHES upload URL
+	BaseURL   string // empty for github.com; e.g. "https://ghe.example.com/api/v3" for GHES
+	UploadURL string // optional GHES upload URL
+
+	// Token-based auth. Used by `cadoo ci` inside GitHub Actions where the
+	// runner injects GITHUB_TOKEN. Mutually exclusive with App auth.
+	Token string
+
 	AppID          int64
 	InstallationID int64
 	PrivateKeyPEM  []byte
@@ -33,19 +41,28 @@ type Adapter struct {
 	client *gogithub.Client
 }
 
-// New authenticates as a GitHub App installation and returns a ready Adapter.
+// New returns a ready Adapter authenticated either by bearer token or as a
+// GitHub App installation, depending on which fields of cfg are set.
 func New(cfg Config) (*Adapter, error) {
-	tr, err := ghinstallation.New(http.DefaultTransport, cfg.AppID, cfg.InstallationID, cfg.PrivateKeyPEM)
-	if err != nil {
-		return nil, fmt.Errorf("github app auth: %w", err)
-	}
-	if cfg.BaseURL != "" {
-		tr.BaseURL = strings.TrimRight(cfg.BaseURL, "/")
+	var (
+		httpClient *http.Client
+		client     *gogithub.Client
+		err        error
+	)
+
+	if cfg.Token != "" {
+		httpClient = &http.Client{Timeout: 30 * time.Second}
+	} else {
+		tr, err := ghinstallation.New(http.DefaultTransport, cfg.AppID, cfg.InstallationID, cfg.PrivateKeyPEM)
+		if err != nil {
+			return nil, fmt.Errorf("github app auth: %w", err)
+		}
+		if cfg.BaseURL != "" {
+			tr.BaseURL = strings.TrimRight(cfg.BaseURL, "/")
+		}
+		httpClient = &http.Client{Transport: tr, Timeout: 30 * time.Second}
 	}
 
-	httpClient := &http.Client{Transport: tr, Timeout: 30 * time.Second}
-
-	var client *gogithub.Client
 	if cfg.BaseURL == "" {
 		client = gogithub.NewClient(httpClient)
 	} else {
@@ -53,6 +70,9 @@ func New(cfg Config) (*Adapter, error) {
 		if err != nil {
 			return nil, fmt.Errorf("ghes urls: %w", err)
 		}
+	}
+	if cfg.Token != "" {
+		client = client.WithAuthToken(cfg.Token)
 	}
 	return &Adapter{cfg: cfg, client: client}, nil
 }

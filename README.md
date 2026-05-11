@@ -124,9 +124,11 @@ Details: [docs/PRE_MERGE_GATES.md](docs/PRE_MERGE_GATES.md).
 
 Cadoo runs in two deployment shapes. Pick the one that fits.
 
-### CI-mode (recommended for GitLab)
+### CI-mode (GitLab CI / GitHub Actions)
 
-Run as a one-shot Docker image inside your GitLab CI pipeline on `merge_request_event`. No server, no webhook, no DB. Cadoo posts as whatever user owns the token (mint a **Project Access Token** to get the auto-created `@project_NNN_bot_HEX` identity).
+Run as a one-shot Docker image inside your CI pipeline. No server, no webhook, no DB. Cadoo posts as whatever identity owns the token.
+
+**GitLab CI** — on `merge_request_event`. Mint a **Project Access Token** to post as the auto-created `@project_NNN_bot_HEX` identity.
 
 ```yaml
 # .gitlab-ci.yml — minimal version
@@ -142,9 +144,37 @@ cadoo-review:
   allow_failure: true
 ```
 
-Set `GITLAB_TOKEN`, `LLM_GATEWAY_URL`, and `LLM_GATEWAY_API_KEY` as masked CI/CD variables. A full example with annotations lives at [`deploy/gitlab/.gitlab-ci.cadoo.yml`](deploy/gitlab/.gitlab-ci.cadoo.yml).
+Set `GITLAB_TOKEN`, `LLM_GATEWAY_URL`, and `LLM_GATEWAY_API_KEY` as masked CI/CD variables. Full example: [`deploy/gitlab/.gitlab-ci.cadoo.yml`](deploy/gitlab/.gitlab-ci.cadoo.yml).
 
-Trade-off: CI-mode is stateless, so KB/learnings (`/learn` and `/unlearn`), audit log, and slash-commands on MR notes are not available. Idempotent-comment editing across resyncs also needs the webhook+DB shape. For everything else, CI-mode is the lower-friction path.
+**GitHub Actions** — on `pull_request`. Uses the runner-injected `GITHUB_TOKEN`, so Cadoo posts as `github-actions[bot]` with no separate App install.
+
+```yaml
+# .github/workflows/cadoo-review.yml — minimal version
+name: cadoo-review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+jobs:
+  cadoo-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
+      issues: write
+    container: ghcr.io/payamqorbanpour/cadoo-cli:latest
+    steps:
+      - name: Run cadoo
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LLM_GATEWAY_URL: ${{ secrets.LLM_GATEWAY_URL }}
+          LLM_GATEWAY_API_KEY: ${{ secrets.LLM_GATEWAY_API_KEY }}
+        run: cadoo ci --pr "${{ github.event.pull_request.html_url }}"
+```
+
+Set `LLM_GATEWAY_URL` and `LLM_GATEWAY_API_KEY` as repo (or org) Actions secrets. Full example: [`deploy/github/cadoo-review.yml`](deploy/github/cadoo-review.yml). GHES is supported automatically — the PR URL's host drives provider selection.
+
+Trade-off: CI-mode is stateless, so KB/learnings (`/learn` and `/unlearn`), audit log, and slash-commands on PR/MR notes are not available. Idempotent-comment editing across resyncs also needs the webhook+DB shape. For everything else, CI-mode is the lower-friction path.
 
 ### Webhook + Helm (full feature set)
 

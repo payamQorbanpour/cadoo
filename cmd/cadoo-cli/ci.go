@@ -1,8 +1,9 @@
 // CI-mode for cadoo-cli: a one-shot review pass intended to run inside a
-// GitLab CI pipeline on merge_request_event. Reads $GITLAB_TOKEN +
-// $LLM_GATEWAY_* from the environment, parses the MR URL, builds a
-// stateless Dispatcher (no KB / learnings / audit / sandbox), and
-// dispatches the requested tools sequentially.
+// GitLab CI pipeline on merge_request_event or a GitHub Actions workflow on
+// pull_request. Reads the provider-specific token env (GITLAB_TOKEN /
+// GITHUB_TOKEN) and $LLM_GATEWAY_* from the environment, parses the PR/MR
+// URL, builds a stateless Dispatcher (no KB / learnings / audit / sandbox),
+// and dispatches the requested tools sequentially.
 package main
 
 import (
@@ -19,86 +20,129 @@ import (
 	"github.com/payamqorbanpour/cadoo/internal/llm/litellm"
 	"github.com/payamqorbanpour/cadoo/internal/orchestrator"
 	"github.com/payamqorbanpour/cadoo/internal/vcs"
+	cadoogh "github.com/payamqorbanpour/cadoo/internal/vcs/github"
 	cadoogl "github.com/payamqorbanpour/cadoo/internal/vcs/gitlab"
 )
 
-// mrTarget is everything ci needs to talk to one merge request.
-type mrTarget struct {
-	BaseURL     string // e.g. "https://gitlab.example.com" (no trailing slash, no /api/v4)
-	APIBaseURL  string // BaseURL + "/api/v4"
-	ProjectPath string // e.g. "group/subgroup/project"
-	IID         int64
+// ciTarget is everything ci needs to talk to one pull-request / merge-request.
+type ciTarget struct {
+	Provider    vcs.Kind // KindGitHub / KindGitHubEnterprise / KindGitLab
+	BaseURL     string   // e.g. "https://gitlab.example.com" or "https://github.com" (no trailing slash, no /api)
+	APIBaseURL  string   // GitLab: BaseURL+"/api/v4"; GHES: BaseURL+"/api/v3"; github.com: ""
+	ProjectPath string   // "group/subgroup/project" or "owner/repo"
+	Number      int64    // MR IID or PR number
 }
 
-// parseMRURL accepts the standard MR URL forms and returns the pieces the
-// GitLab adapter + dispatcher need.
+// parseTargetURL accepts the standard PR/MR URL forms for GitLab and GitHub.
 //
 // Supported:
-//   - https://gitlab.com/group/project/-/merge_requests/42
-//   - https://gitlab.example.com/group/subgroup/project/-/merge_requests/42
-//   - https://gitlab.example.com/group/project/merge_requests/42  (legacy)
-func parseMRURL(raw string) (mrTarget, error) {
+//
+//	GitLab:
+//	  - https://gitlab.com/group/project/-/merge_requests/42
+//	  - https://gitlab.example.com/group/subgroup/project/-/merge_requests/42
+//	  - https://gitlab.example.com/group/project/merge_requests/42  (legacy)
+//	GitHub:
+//	  - https://github.com/owner/repo/pull/42
+//	  - https://ghe.example.com/owner/repo/pull/42  (GHES → KindGitHubEnterprise)
+func parseTargetURL(raw string) (ciTarget, error) {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
-		return mrTarget{}, fmt.Errorf("parse url: %w", err)
+		return ciTarget{}, fmt.Errorf("parse url: %w", err)
 	}
 	if u.Scheme == "" || u.Host == "" {
-		return mrTarget{}, fmt.Errorf("missing scheme or host in %q", raw)
+		return ciTarget{}, fmt.Errorf("missing scheme or host in %q", raw)
 	}
 	path := strings.Trim(u.Path, "/")
-	// Try the modern "/-/merge_requests/" form first.
-	project, iidStr, ok := strings.Cut(path, "/-/merge_requests/")
-	if !ok {
-		// Legacy form: "/merge_requests/" without the "/-/" separator.
-		// We only treat it as legacy if "/-/merge_requests/" wasn't found.
-		project, iidStr, ok = strings.Cut(path, "/merge_requests/")
-	}
-	if !ok || project == "" || iidStr == "" {
-		return mrTarget{}, fmt.Errorf("not a merge-request URL: %q", raw)
-	}
-	// Strip any trailing path (e.g. "/diffs", "/commits").
-	if i := strings.IndexByte(iidStr, '/'); i >= 0 {
-		iidStr = iidStr[:i]
-	}
-	iid, err := strconv.ParseInt(iidStr, 10, 64)
-	if err != nil || iid <= 0 {
-		return mrTarget{}, fmt.Errorf("merge-request iid %q is not a positive integer", iidStr)
-	}
 	base := strings.TrimRight(u.Scheme+"://"+u.Host, "/")
-	return mrTarget{
-		BaseURL:     base,
-		APIBaseURL:  base + "/api/v4",
-		ProjectPath: project,
-		IID:         iid,
-	}, nil
+
+	// GitLab MR — modern "/-/merge_requests/" then legacy "/merge_requests/".
+	for _, sep := range []string{"/-/merge_requests/", "/merge_requests/"} {
+		project, tail, ok := strings.Cut(path, sep)
+		if !ok {
+			continue
+		}
+		n, err := parseTrailingNumber(tail)
+		if err != nil || project == "" {
+			return ciTarget{}, fmt.Errorf("not a valid merge-request URL: %q", raw)
+		}
+		return ciTarget{
+			Provider:    vcs.KindGitLab,
+			BaseURL:     base,
+			APIBaseURL:  base + "/api/v4",
+			ProjectPath: project,
+			Number:      n,
+		}, nil
+	}
+
+	// GitHub PR — "<owner>/<repo>/pull/<N>".
+	if project, tail, ok := strings.Cut(path, "/pull/"); ok {
+		n, err := parseTrailingNumber(tail)
+		if err != nil {
+			return ciTarget{}, fmt.Errorf("not a valid pull-request URL: %q", raw)
+		}
+		if strings.Count(project, "/") != 1 || project == "" {
+			return ciTarget{}, fmt.Errorf("not a valid pull-request URL: %q", raw)
+		}
+		kind := vcs.KindGitHub
+		apiBase := ""
+		if u.Host != "github.com" {
+			kind = vcs.KindGitHubEnterprise
+			apiBase = base + "/api/v3"
+		}
+		return ciTarget{
+			Provider:    kind,
+			BaseURL:     base,
+			APIBaseURL:  apiBase,
+			ProjectPath: project,
+			Number:      n,
+		}, nil
+	}
+
+	return ciTarget{}, fmt.Errorf("not a pull-request or merge-request URL: %q", raw)
+}
+
+// parseTrailingNumber strips any path after the first slash and parses the
+// leading positive integer (e.g. "42/files" → 42).
+func parseTrailingNumber(s string) (int64, error) {
+	if i := strings.IndexByte(s, '/'); i >= 0 {
+		s = s[:i]
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("not a positive integer: %q", s)
+	}
+	return n, nil
 }
 
 // ciCmd is the entry point for `cadoo ci`.
 func ciCmd(args []string) {
 	fs := flag.NewFlagSet("ci", flag.ExitOnError)
-	mrURL := fs.String("mr", "", "GitLab merge-request URL (required)")
+	var targetURL string
+	fs.StringVar(&targetURL, "mr", "", "GitLab merge-request URL")
+	fs.StringVar(&targetURL, "pr", "", "GitHub pull-request URL (alias of --mr)")
 	toolsCSV := fs.String("tools", "describe,review,improve",
 		"comma-separated tools to run in order (e.g. describe,review,improve)")
 	cfgPath := fs.String("config", "", "path to .cadoo.yaml (default: <repo>/.cadoo.yaml)")
-	repoDir := fs.String("repo", envOr("CI_PROJECT_DIR", "."),
+	defaultRepo := envOr("CI_PROJECT_DIR", envOr("GITHUB_WORKSPACE", "."))
+	repoDir := fs.String("repo", defaultRepo,
 		"path to the checked-out repo root (used to locate .cadoo.yaml)")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
-	if *mrURL == "" {
-		fmt.Fprintln(os.Stderr, "ci: --mr is required (e.g. --mr \"$CI_MERGE_REQUEST_PROJECT_URL/-/merge_requests/$CI_MERGE_REQUEST_IID\")")
+	if targetURL == "" {
+		fmt.Fprintln(os.Stderr, "ci: --mr (GitLab) or --pr (GitHub) URL is required")
 		os.Exit(2)
 	}
 
-	target, err := parseMRURL(*mrURL)
+	target, err := parseTargetURL(targetURL)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "ci:", err)
 		os.Exit(2)
 	}
 
-	token := os.Getenv("GITLAB_TOKEN")
-	if token == "" {
-		fmt.Fprintln(os.Stderr, "ci: GITLAB_TOKEN env is required")
+	provider, err := buildProvider(target)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "ci:", err)
 		os.Exit(2)
 	}
 
@@ -121,20 +165,10 @@ func ciCmd(args []string) {
 		os.Exit(1)
 	}
 
-	// One-shot GitLab adapter.
-	gl, err := cadoogl.New(cadoogl.Config{
-		BaseURL: target.BaseURL,
-		Token:   token,
-	})
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "ci: gitlab client:", err)
-		os.Exit(1)
-	}
-
 	// Stateless dispatcher: no DB, no audit, no KB.
 	d := &orchestrator.Dispatcher{
 		LLM:      litellm.New(llmURL, llmKey),
-		VCSPool:  map[vcs.Kind]vcs.Provider{vcs.KindGitLab: gl},
+		VCSPool:  map[vcs.Kind]vcs.Provider{target.Provider: provider},
 		Model:    model,
 		BaseCfg:  repoCfg,
 		Registry: orchestrator.DefaultRegistry(),
@@ -156,14 +190,19 @@ func ciCmd(args []string) {
 		}
 	}
 
+	sep := "#"
+	if target.Provider == vcs.KindGitLab {
+		sep = "!"
+	}
+
 	var firstErr error
 	for _, name := range toolList {
-		fmt.Fprintf(os.Stderr, "ci: dispatching %s on %s!%d\n", name, target.ProjectPath, target.IID)
+		fmt.Fprintf(os.Stderr, "ci: dispatching %s on %s%s%d\n", name, target.ProjectPath, sep, target.Number)
 		job := orchestrator.ToolJob{
-			Provider:     vcs.KindGitLab,
+			Provider:     target.Provider,
 			Tool:         name,
 			RepoFullName: target.ProjectPath,
-			PRNumber:     target.IID,
+			PRNumber:     target.Number,
 			Trigger:      "ci",
 		}
 		if err := d.Run(ctx, job); err != nil {
@@ -171,14 +210,50 @@ func ciCmd(args []string) {
 			if firstErr == nil {
 				firstErr = err
 			}
-			// Keep going scripts run describe→review→improve
-			// even if one stage errors. The pipeline can decide via
-			// allow_failure: true whether to fail the build.
+			// Keep going — scripts run describe→review→improve even if one
+			// stage errors. The pipeline can decide via allow_failure: true
+			// whether to fail the build.
 			continue
 		}
 	}
 	if firstErr != nil {
 		os.Exit(1)
+	}
+}
+
+// buildProvider wires the right VCS adapter for the parsed target, reading
+// the token from the provider-specific env var.
+func buildProvider(target ciTarget) (vcs.Provider, error) {
+	switch target.Provider {
+	case vcs.KindGitLab:
+		token := os.Getenv("GITLAB_TOKEN")
+		if token == "" {
+			return nil, fmt.Errorf("GITLAB_TOKEN env is required for GitLab MRs")
+		}
+		gl, err := cadoogl.New(cadoogl.Config{
+			BaseURL: target.BaseURL,
+			Token:   token,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("gitlab client: %w", err)
+		}
+		return gl, nil
+	case vcs.KindGitHub, vcs.KindGitHubEnterprise:
+		token := os.Getenv("GITHUB_TOKEN")
+		if token == "" {
+			return nil, fmt.Errorf("GITHUB_TOKEN env is required for GitHub PRs")
+		}
+		ghCfg := cadoogh.Config{Token: token}
+		if target.Provider == vcs.KindGitHubEnterprise {
+			ghCfg.BaseURL = target.APIBaseURL
+		}
+		gh, err := cadoogh.New(ghCfg)
+		if err != nil {
+			return nil, fmt.Errorf("github client: %w", err)
+		}
+		return gh, nil
+	default:
+		return nil, fmt.Errorf("unsupported provider %q", target.Provider)
 	}
 }
 
