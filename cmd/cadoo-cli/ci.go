@@ -148,7 +148,7 @@ func ciCmd(args []string) {
 
 	llmURL := envOr("LLM_GATEWAY_URL", os.Getenv("OPENAI_API_BASE"))
 	llmKey := envOr("LLM_GATEWAY_API_KEY", os.Getenv("OPENAI_API_KEY"))
-	model := envOr("CADOO_DEFAULT_MODEL", "claude-sonnet-4-6")
+	model := os.Getenv("CADOO_DEFAULT_MODEL")
 	if llmURL == "" {
 		fmt.Fprintln(os.Stderr, "ci: LLM_GATEWAY_URL (or OPENAI_API_BASE) env is required")
 		os.Exit(2)

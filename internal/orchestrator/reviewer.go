@@ -182,13 +182,19 @@ func (d *Dispatcher) Run(ctx context.Context, job ToolJob) (retErr error) {
 		ExcludePaths: cfg.Review.ExcludePaths,
 	})
 
+	model := d.modelName(cfg)
+	if model == "" {
+		err := fmt.Errorf("no LLM model configured: set `model:` in .cadoo.yaml or CADOO_DEFAULT_MODEL")
+		d.failCheck(ctx, provider, pr, err)
+		return err
+	}
 	in := tools.Input{
 		PR:     pr,
 		Files:  files,
 		Packed: packed,
 		Config: cfg,
 		LLM:    d.LLM,
-		Model:  d.modelName(cfg),
+		Model:  model,
 		Args:   job.Args,
 	}
 	if ff, ok := provider.(FileFetcher); ok && pr.HeadSHA != "" {
@@ -259,10 +265,10 @@ func (d *Dispatcher) Run(ctx context.Context, job ToolJob) (retErr error) {
 // applyResult posts everything the tool returned. Failures on individual
 // posts are logged but don't abort — partial output is still valuable.
 //
-// When d.Posted is configured, summary comments are edited in place on
-// re-dispatch and inline comments whose fingerprints have already been
-// posted are skipped. tool identifies the (PR, tool) pair we're keying
-// against; pass "" to disable idempotency for this call.
+// When d.Posted is configured, every tool's summary becomes a labelled
+// section inside one consolidated PR comment (instead of one comment per
+// tool), and inline comments whose fingerprints have already been posted
+// are skipped. Passing tool == "" disables idempotency for this call.
 func (d *Dispatcher) applyResult(ctx context.Context, provider vcs.Provider, pr *vcs.PullRequest, tool string, res *tools.Result) error {
 	if res == nil {
 		return nil
@@ -288,29 +294,66 @@ func (d *Dispatcher) applyResult(ctx context.Context, provider vcs.Provider, pr 
 			slog.Error("upsert extra check run", "err", err, "name", run.Name, "pr", pr.URL)
 		}
 	}
-	// EditPRBody: support added in a follow-up once vcs.Provider grows an
-	// EditPullRequest method. Currently a no-op.
+	if res.EditPRBody != nil {
+		if err := d.applyPRBody(ctx, provider, pr, *res.EditPRBody); err != nil {
+			slog.Error("edit pr body", "err", err, "pr", pr.URL)
+		}
+	}
 	return nil
 }
 
+// postSummary turns this tool's body into a section inside the consolidated
+// Cadoo comment. When d.Posted is unavailable, falls back to the legacy
+// per-tool comment (so the dispatcher still works for callers — e.g. cadoo
+// ci — that don't carry a Postgres pool).
 func (d *Dispatcher) postSummary(ctx context.Context, provider vcs.Provider, pr *vcs.PullRequest, key findings.PRKey, tool, body string) {
-	if tool != "" && d.Posted != nil {
-		if existing, err := d.Posted.SummaryID(ctx, key, tool); err == nil && existing != "" {
-			if err := provider.UpdateSummaryComment(ctx, pr, existing, body); err == nil {
-				return
-			}
-			// Fall through to create-new on edit failure (comment may have
-			// been deleted upstream).
+	if tool == "" || d.Posted == nil || !d.Posted.Enabled() {
+		// Legacy path: one comment per call, no consolidation.
+		if _, err := provider.PostSummaryComment(ctx, pr, body); err != nil {
+			slog.Error("post summary", "err", err, "pr", pr.URL)
 		}
+		return
 	}
-	id, err := provider.PostSummaryComment(ctx, pr, body)
+
+	if err := d.Posted.PutSection(ctx, key, tool, body); err != nil {
+		slog.Debug("put section", "err", err)
+	}
+	sections, err := d.Posted.AllSections(ctx, key)
+	if err != nil {
+		slog.Debug("all sections", "err", err)
+		sections = []findings.Section{{Tool: tool, Body: body}}
+	}
+	rendered := renderConsolidated(sections)
+
+	existing, err := d.Posted.SummaryID(ctx, key, findings.WrapperToolKey)
+	if err == nil && existing != "" {
+		if err := provider.UpdateSummaryComment(ctx, pr, existing, rendered); err == nil {
+			return
+		}
+		// Fall through to create-new on edit failure (comment may have been
+		// deleted upstream).
+	}
+	id, err := provider.PostSummaryComment(ctx, pr, rendered)
 	if err != nil {
 		slog.Error("post summary", "err", err, "pr", pr.URL)
 		return
 	}
-	if tool != "" && id != "" {
-		_ = d.Posted.PutSummaryID(ctx, key, tool, id)
+	if id != "" {
+		_ = d.Posted.PutSummaryID(ctx, key, findings.WrapperToolKey, id)
 	}
+}
+
+// applyPRBody splices a Cadoo-managed section into the PR description while
+// preserving whatever the user originally wrote. Idempotent on re-dispatch.
+func (d *Dispatcher) applyPRBody(ctx context.Context, provider vcs.Provider, pr *vcs.PullRequest, section string) error {
+	if strings.TrimSpace(section) == "" {
+		return nil
+	}
+	newBody := spliceCadooBody(pr.Body, section)
+	if newBody == pr.Body {
+		return nil
+	}
+	return provider.EditPullRequestBody(ctx, pr, newBody)
 }
 
 func (d *Dispatcher) postInline(ctx context.Context, provider vcs.Provider, pr *vcs.PullRequest, key findings.PRKey, tool string, comments []vcs.InlineComment) {
@@ -377,14 +420,17 @@ func isMissingFile(err error) bool {
 	return strings.Contains(msg, "404") || strings.Contains(msg, "not found")
 }
 
+// modelName resolves which LLM model this dispatch should use. We DO NOT
+// silently fall back to a hardcoded default any more: an unset model
+// surfaces as a clear dispatch error instead of routing every PR through
+// whatever shape Cadoo happened to ship as the implicit default. Operators
+// who want a baseline model set CADOO_DEFAULT_MODEL (read into d.Model) or
+// pin one per-repo via .cadoo.yaml `model:`.
 func (d *Dispatcher) modelName(cfg config.Repo) string {
 	if cfg.Model != "" {
 		return cfg.Model
 	}
-	if d.Model != "" {
-		return d.Model
-	}
-	return "claude-sonnet-4-6"
+	return d.Model
 }
 
 func (d *Dispatcher) maxTokens() int {

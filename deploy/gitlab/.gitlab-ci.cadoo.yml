@@ -15,8 +15,10 @@
 #                         their respective API base URLs.
 #   LLM_GATEWAY_API_KEY   The matching API key.
 #
+# Required when .cadoo.yaml does not set `model:`:
+#   CADOO_DEFAULT_MODEL   LiteLLM model name your gateway exposes.
+#
 # Optional:
-#   CADOO_DEFAULT_MODEL   Defaults to "claude-sonnet-4-6".
 #   CADOO_TOOLS           Comma-separated tools to run. Defaults to
 #                         "describe,review,improve".
 

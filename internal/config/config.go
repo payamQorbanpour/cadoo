@@ -106,10 +106,15 @@ type KB struct {
 }
 
 // Default returns sensible defaults for an empty config.
+//
+// Note: Model intentionally has no default. Operators must set it either
+// per-repo (.cadoo.yaml `model:`) or globally (CADOO_DEFAULT_MODEL). The
+// dispatcher fails fast with a clear message when neither is set, which we
+// prefer over silently routing every PR through whatever Cadoo shipped as
+// the implicit default.
 func Default() Repo {
 	return Repo{
-		Model: "claude-sonnet-4-6",
-		Auto:  map[string]string{"review": "on_open", "describe": "on_open"},
+		Auto: map[string]string{"review": "on_open", "describe": "on_open"},
 		Review: ReviewSection{
 			SeverityThreshold: "warn",
 			IncludePaths:      []string{"**/*"},

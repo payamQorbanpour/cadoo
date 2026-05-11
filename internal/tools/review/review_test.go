@@ -90,7 +90,7 @@ func TestReviewToolCleanRunPostsStatsSummary(t *testing.T) {
 	if res.Summary == "" {
 		t.Fatal("expected stats summary on clean run with StatsOnClean default, got empty")
 	}
-	for _, want := range []string{"Cadoo review", "No findings", "Reviewed 2 file", "1234 tokens", "claude-sonnet-4-6"} {
+	for _, want := range []string{"No findings", "Files", "2 (~1k tokens)", "claude-sonnet-4-6"} {
 		if !strings.Contains(res.Summary, want) {
 			t.Errorf("summary missing %q:\n%s", want, res.Summary)
 		}

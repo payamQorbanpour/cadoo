@@ -246,47 +246,124 @@ func hasBlocking(findings []Finding, blockOn []string) bool {
 	return false
 }
 
-// BuildSummary formats the top-level PR comment for /review.
+// BuildSummary formats the /review section that lives inside the
+// consolidated Cadoo comment. It opens with a compact at-a-glance table
+// (effort, findings, blockers) and lets the inline review threads carry
+// the per-finding detail. Section header + ## Cadoo wrapper are added by
+// the orchestrator; tools emit body-only fragments.
 func BuildSummary(out *Output, packed contextengine.Compressed, posted int) string {
 	var b strings.Builder
-	b.WriteString("## Cadoo review\n\n")
 	if out.Summary != "" {
-		b.WriteString(out.Summary)
+		b.WriteString(strings.TrimSpace(out.Summary))
 		b.WriteString("\n\n")
 	}
-	fmt.Fprintf(&b, "Posted %d inline finding(s). Reviewed %d file(s) (~%d tokens).\n",
-		posted, len(packed.Files), packed.EstTokens)
-	if len(packed.Truncated) > 0 {
-		fmt.Fprintf(&b, "\nTruncated for budget: %s\n", strings.Join(packed.Truncated, ", "))
+	b.WriteString(reviewTable(packed, posted, blockingCount(out.Findings)))
+	if highlights := topFindings(out.Findings, 3); highlights != "" {
+		b.WriteString("\n<details><summary>⚡ Focus areas</summary>\n\n")
+		b.WriteString(highlights)
+		b.WriteString("\n</details>\n")
 	}
-	if len(packed.Skipped) > 0 {
-		fmt.Fprintf(&b, "\nSkipped (filter or budget): %s\n", strings.Join(packed.Skipped, ", "))
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// BuildCleanSummary formats the compact "no findings" section emitted when
+// CommentPolicy.SilentOnClean + StatsOnClean are both true and the run
+// produced zero post-threshold findings. Wrapper header is added by the
+// orchestrator.
+func BuildCleanSummary(packed contextengine.Compressed, model string) string {
+	var b strings.Builder
+	b.WriteString("No findings at or above the configured severity threshold.\n\n")
+	b.WriteString(reviewTable(packed, 0, 0))
+	if model != "" {
+		fmt.Fprintf(&b, "\n_Model: `%s`._\n", model)
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// reviewTable renders the small at-a-glance row at the top of /review's
+// section: effort dots, file count, finding totals. Mimics Qodo Merge's
+// reviewer-guide table while staying under five rows.
+func reviewTable(packed contextengine.Compressed, posted, blockers int) string {
+	effort := effortScore(len(packed.Files), packed.EstTokens)
+	dots := strings.Repeat("●", effort) + strings.Repeat("○", 5-effort)
+	var b strings.Builder
+	b.WriteString("| | |\n|---|---|\n")
+	fmt.Fprintf(&b, "| ⏱ Effort | %s |\n", dots)
+	fmt.Fprintf(&b, "| 📄 Files | %d (~%dk tokens) |\n", len(packed.Files), packed.EstTokens/1000)
+	if posted > 0 {
+		fmt.Fprintf(&b, "| 🔎 Findings | %d posted (%d blocking) |\n", posted, blockers)
+	} else {
+		b.WriteString("| 🔎 Findings | clean |\n")
+	}
+	if len(packed.Truncated) > 0 || len(packed.Skipped) > 0 {
+		fmt.Fprintf(&b, "| ✂ Skipped | %d files |\n", len(packed.Truncated)+len(packed.Skipped))
 	}
 	return b.String()
 }
 
-// BuildCleanSummary formats the compact "no findings" PR comment posted
-// when CommentPolicy.SilentOnClean and CommentPolicy.StatsOnClean are
-// both true and the run produced zero post-threshold findings. The
-// comment is idempotent (overwrites the previous one via the findings
-// fingerprint) so noise stays at one comment per PR regardless of
-// resync count.
-func BuildCleanSummary(packed contextengine.Compressed, model string) string {
+// effortScore returns a 1-5 dot rating that hints at how much human review
+// time this PR needs. The threshold tuning is rough on purpose: this is a
+// glanceable signal, not a metric.
+func effortScore(files, tokens int) int {
+	switch {
+	case files >= 25 || tokens >= 40_000:
+		return 5
+	case files >= 12 || tokens >= 20_000:
+		return 4
+	case files >= 6 || tokens >= 10_000:
+		return 3
+	case files >= 3 || tokens >= 3_000:
+		return 2
+	default:
+		return 1
+	}
+}
+
+// topFindings renders up to n bullet items pointing at the most important
+// findings (block > warn > nit). Each bullet is "file:line — title".
+func topFindings(findings []Finding, n int) string {
+	if len(findings) == 0 {
+		return ""
+	}
+	ranked := make([]Finding, len(findings))
+	copy(ranked, findings)
+	// stable sort by rank desc; preserves model order within a severity bucket
+	for i := 1; i < len(ranked); i++ {
+		for j := i; j > 0 && severityRank(ranked[j].Severity) > severityRank(ranked[j-1].Severity); j-- {
+			ranked[j], ranked[j-1] = ranked[j-1], ranked[j]
+		}
+	}
+	if len(ranked) > n {
+		ranked = ranked[:n]
+	}
 	var b strings.Builder
-	b.WriteString("## Cadoo review\n\n")
-	b.WriteString("No findings at or above the configured severity threshold.\n\n")
-	if model != "" {
-		fmt.Fprintf(&b, "Reviewed %d file(s) (~%d tokens) with `%s`.\n",
-			len(packed.Files), packed.EstTokens, model)
-	} else {
-		fmt.Fprintf(&b, "Reviewed %d file(s) (~%d tokens).\n",
-			len(packed.Files), packed.EstTokens)
-	}
-	if len(packed.Truncated) > 0 {
-		fmt.Fprintf(&b, "\nTruncated for budget: %s\n", strings.Join(packed.Truncated, ", "))
-	}
-	if len(packed.Skipped) > 0 {
-		fmt.Fprintf(&b, "\nSkipped (filter or budget): %s\n", strings.Join(packed.Skipped, ", "))
+	for _, f := range ranked {
+		loc := f.File
+		if f.LineStart > 0 {
+			loc = fmt.Sprintf("%s:%d", f.File, f.LineStart)
+		}
+		title := f.Title
+		if title == "" {
+			title = firstLine(f.Body)
+		}
+		fmt.Fprintf(&b, "- **%s** `%s` — %s\n", strings.ToUpper(f.Severity), loc, title)
 	}
 	return b.String()
+}
+
+func blockingCount(findings []Finding) int {
+	n := 0
+	for _, f := range findings {
+		if strings.EqualFold(f.Severity, "block") {
+			n++
+		}
+	}
+	return n
+}
+
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return strings.TrimSpace(s[:i])
+	}
+	return strings.TrimSpace(s)
 }

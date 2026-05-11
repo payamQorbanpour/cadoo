@@ -99,5 +99,10 @@ type Provider interface {
 	UpdateSummaryComment(ctx context.Context, pr *PullRequest, id, body string) error
 	PostInlineComments(ctx context.Context, pr *PullRequest, comments []InlineComment) error
 
+	// EditPullRequestBody replaces the PR/MR description. The orchestrator
+	// uses this to inject Cadoo-managed sections (e.g. /describe) while
+	// preserving the user's original text inside an explicit section block.
+	EditPullRequestBody(ctx context.Context, pr *PullRequest, body string) error
+
 	UpsertCheckRun(ctx context.Context, pr *PullRequest, run CheckRun) error
 }

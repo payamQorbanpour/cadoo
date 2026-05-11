@@ -69,7 +69,7 @@ func FromEnv() (*Settings, error) {
 		DatabaseURL:      os.Getenv("DATABASE_URL"),
 		LLMGatewayURL:    envOr("LLM_GATEWAY_URL", "http://litellm:4000/v1"),
 		LLMGatewayAPIKey: os.Getenv("LLM_GATEWAY_API_KEY"),
-		DefaultModel:     envOr("CADOO_DEFAULT_MODEL", "claude-sonnet-4-6"),
+		DefaultModel:     os.Getenv("CADOO_DEFAULT_MODEL"),
 
 		GitHubBaseURL:       os.Getenv("GITHUB_BASE_URL"),
 		GitHubUploadURL:     os.Getenv("GITHUB_UPLOAD_URL"),

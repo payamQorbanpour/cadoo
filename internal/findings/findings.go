@@ -33,6 +33,10 @@ type Store struct {
 // New builds a Store.
 func New(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
+// Enabled reports whether this Store can read/write — i.e. it has a non-nil
+// pgx pool. Callers use this to branch into a no-DB fallback path.
+func (s *Store) Enabled() bool { return s != nil && s.pool != nil }
+
 // Fingerprint hashes the stable fields of an inline comment so re-dispatches
 // can recognize "already posted". Body is included so a tool that legitimately
 // rephrases a finding will surface the rephrasing as a fresh signal.
@@ -107,8 +111,8 @@ func (s *Store) PutSummaryID(ctx context.Context, key PRKey, tool, externalComme
 		return nil
 	}
 	const q = `
-INSERT INTO posted_summaries(provider, repo_full_name, pr_number, tool, external_comment_id)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO posted_summaries(provider, repo_full_name, pr_number, tool, external_comment_id, body)
+VALUES ($1, $2, $3, $4, $5, '')
 ON CONFLICT (provider, repo_full_name, pr_number, tool) DO UPDATE
   SET external_comment_id = EXCLUDED.external_comment_id, updated_at = now()`
 	_, err := s.pool.Exec(ctx, q, key.Provider, key.RepoFullName, key.PRNumber, tool, externalCommentID)
@@ -116,6 +120,63 @@ ON CONFLICT (provider, repo_full_name, pr_number, tool) DO UPDATE
 		return fmt.Errorf("put summary id: %w", err)
 	}
 	return nil
+}
+
+// WrapperToolKey is the sentinel `tool` value used to track the consolidated
+// summary comment that wraps every tool's section. Tool names never collide
+// with the empty string.
+const WrapperToolKey = ""
+
+// Section is one tool's rendered fragment inside the consolidated comment.
+type Section struct {
+	Tool string
+	Body string
+}
+
+// PutSection upserts the rendered body for a single tool's section. The
+// wrapper comment is identified by tool == WrapperToolKey, and stored without
+// a body (its external ID points at the comment that contains every section).
+func (s *Store) PutSection(ctx context.Context, key PRKey, tool, body string) error {
+	if s == nil || s.pool == nil {
+		return nil
+	}
+	const q = `
+INSERT INTO posted_summaries(provider, repo_full_name, pr_number, tool, external_comment_id, body)
+VALUES ($1, $2, $3, $4, '', $5)
+ON CONFLICT (provider, repo_full_name, pr_number, tool) DO UPDATE
+  SET body = EXCLUDED.body, updated_at = now()`
+	_, err := s.pool.Exec(ctx, q, key.Provider, key.RepoFullName, key.PRNumber, tool, body)
+	if err != nil {
+		return fmt.Errorf("put section: %w", err)
+	}
+	return nil
+}
+
+// AllSections returns every tool section recorded for this PR, ordered by
+// tool name. Sections whose body is empty (e.g. wrapper bookkeeping rows)
+// are skipped.
+func (s *Store) AllSections(ctx context.Context, key PRKey) ([]Section, error) {
+	if s == nil || s.pool == nil {
+		return nil, nil
+	}
+	const q = `SELECT tool, body FROM posted_summaries
+		WHERE provider = $1 AND repo_full_name = $2 AND pr_number = $3
+		  AND tool <> '' AND body <> ''
+		ORDER BY tool`
+	rows, err := s.pool.Query(ctx, q, key.Provider, key.RepoFullName, key.PRNumber)
+	if err != nil {
+		return nil, fmt.Errorf("all sections: %w", err)
+	}
+	defer rows.Close()
+	var out []Section
+	for rows.Next() {
+		var sec Section
+		if err := rows.Scan(&sec.Tool, &sec.Body); err != nil {
+			return nil, fmt.Errorf("scan section: %w", err)
+		}
+		out = append(out, sec)
+	}
+	return out, rows.Err()
 }
 
 func firstLine(s string) string {

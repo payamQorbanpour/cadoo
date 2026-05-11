@@ -3,25 +3,34 @@ package describe
 
 import (
 	"context"
-	"fmt"
+	"strings"
 
 	"github.com/payamqorbanpour/cadoo/internal/tools"
 )
 
-const systemPrompt = `You are Cadoo. Propose a clearer pull-request title and body for this change.
+const systemPrompt = `You are Cadoo. Propose a concise, reviewer-friendly description for this pull request.
 
 Respond with ONLY a JSON object:
 {
-  "title": "<concise PR title in the imperative mood>",
-  "body":  "<markdown body: 1-line intent, then bullet list of key changes, then 'Risks' and 'Test plan' sections>"
+  "title":   "<≤70-char imperative-mood title>",
+  "intent":  "<one-sentence summary of what this PR does and why>",
+  "type":    "<comma-separated labels: Bug fix | Enhancement | Refactor | Tests | Docs | Chore>",
+  "changes": [ "<short bullet — one per meaningful change, ≤90 chars>" ],
+  "risks":   "<one sentence; '' if low-risk>"
 }
 
-Keep the title under 70 characters. Body should be useful to a reviewer who has not seen the diff.`
+Rules:
+- changes: 2-6 bullets max. Skip trivial moves.
+- Do not invent files or behaviour not in the diff.
+- Keep every field tight — the reader skims this.`
 
 // Output is the structured response.
 type Output struct {
-	Title string `json:"title"`
-	Body  string `json:"body"`
+	Title   string   `json:"title"`
+	Intent  string   `json:"intent"`
+	Type    string   `json:"type"`
+	Changes []string `json:"changes"`
+	Risks   string   `json:"risks"`
 }
 
 // Tool implements tools.Tool.
@@ -30,8 +39,10 @@ type Tool struct{}
 // Name implements tools.Tool.
 func (Tool) Name() string { return "describe" }
 
-// Run implements tools.Tool. Posts a summary comment with the proposed
-// description; Phase 2.x will optionally edit the PR body in place.
+// Run implements tools.Tool. Edits the PR body in place: the user's original
+// description stays on top, Cadoo's section is appended (and replaced in
+// place on subsequent dispatches via the marker pair the orchestrator
+// recognises).
 func (Tool) Run(ctx context.Context, in tools.Input) (*tools.Result, error) {
 	user := tools.BuildDiffPrompt(in)
 	var out Output
@@ -39,6 +50,43 @@ func (Tool) Run(ctx context.Context, in tools.Input) (*tools.Result, error) {
 	if err := tools.CallJSON(ctx, in.LLM, in.Model, sys, user, &out); err != nil {
 		return nil, err
 	}
-	body := fmt.Sprintf("## Cadoo: suggested PR description\n\n**Title:** %s\n\n%s", out.Title, out.Body)
-	return &tools.Result{Summary: body}, nil
+	section := buildSection(out)
+	return &tools.Result{EditPRBody: &section}, nil
+}
+
+func buildSection(o Output) string {
+	var b strings.Builder
+	if o.Title != "" {
+		b.WriteString("**Title:** ")
+		b.WriteString(o.Title)
+		b.WriteString("\n\n")
+	}
+	if o.Intent != "" {
+		b.WriteString(o.Intent)
+		b.WriteString("\n\n")
+	}
+	if o.Type != "" {
+		b.WriteString("**Type:** ")
+		b.WriteString(o.Type)
+		b.WriteString("\n\n")
+	}
+	if len(o.Changes) > 0 {
+		b.WriteString("**Changes**\n\n")
+		for _, c := range o.Changes {
+			c = strings.TrimSpace(c)
+			if c == "" {
+				continue
+			}
+			b.WriteString("- ")
+			b.WriteString(c)
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
+	if r := strings.TrimSpace(o.Risks); r != "" {
+		b.WriteString("**Risks:** ")
+		b.WriteString(r)
+		b.WriteString("\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
 }

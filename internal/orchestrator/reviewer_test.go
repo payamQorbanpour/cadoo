@@ -13,13 +13,14 @@ import (
 )
 
 type fakeVCS struct {
-	kind      vcs.Kind
-	pr        *vcs.PullRequest
-	files     []vcs.FileChange
-	mu        sync.Mutex
-	inlineCnt int
-	checks    []vcs.CheckRunStatus
-	summary   string
+	kind       vcs.Kind
+	pr         *vcs.PullRequest
+	files      []vcs.FileChange
+	mu         sync.Mutex
+	inlineCnt  int
+	checks     []vcs.CheckRunStatus
+	summary    string
+	editedBody string
 }
 
 func (f *fakeVCS) Kind() vcs.Kind { return f.kind }
@@ -35,7 +36,16 @@ func (f *fakeVCS) PostSummaryComment(_ context.Context, _ *vcs.PullRequest, body
 	f.summary = body
 	return "1", nil
 }
-func (f *fakeVCS) UpdateSummaryComment(_ context.Context, _ *vcs.PullRequest, _, _ string) error {
+func (f *fakeVCS) UpdateSummaryComment(_ context.Context, _ *vcs.PullRequest, _, body string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.summary = body
+	return nil
+}
+func (f *fakeVCS) EditPullRequestBody(_ context.Context, _ *vcs.PullRequest, body string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.editedBody = body
 	return nil
 }
 func (f *fakeVCS) PostInlineComments(_ context.Context, _ *vcs.PullRequest, c []vcs.InlineComment) error {
@@ -75,6 +85,7 @@ func newDispatcher(reg *tools.Registry, pool map[vcs.Kind]vcs.Provider) *Dispatc
 		VCSPool:  pool,
 		BaseCfg:  config.Default(),
 		Registry: reg,
+		Model:    "test-model",
 	}
 }
 
