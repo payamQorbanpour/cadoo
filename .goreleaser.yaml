@@ -1,0 +1,101 @@
+version: 2
+
+project_name: cadoo
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: cadoo-api
+    main: ./cmd/cadoo-api
+    binary: cadoo-api
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X github.com/payamqorbanpour/cadoo/internal/version.Version={{.Version}}
+
+  - id: cadoo-cli
+    main: ./cmd/cadoo-cli
+    binary: cadoo-cli
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X github.com/payamqorbanpour/cadoo/internal/version.Version={{.Version}}
+
+  - id: cadoo-tunnel
+    main: ./cmd/cadoo-tunnel
+    binary: cadoo-tunnel
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X github.com/payamqorbanpour/cadoo/internal/version.Version={{.Version}}
+
+  - id: cadoo-webhook
+    main: ./cmd/cadoo-webhook
+    binary: cadoo-webhook
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X github.com/payamqorbanpour/cadoo/internal/version.Version={{.Version}}
+
+  - id: cadoo-worker
+    main: ./cmd/cadoo-worker
+    binary: cadoo-worker
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X github.com/payamqorbanpour/cadoo/internal/version.Version={{.Version}}
+
+archives:
+  - id: default
+    name_template: >-
+      {{ .Binary }}_{{ .Version }}_
+      {{- if eq .Os "darwin" }}macos{{ else }}{{ .Os }}{{ end }}_
+      {{- if eq .Arch "amd64" }}x86_64{{ else }}{{ .Arch }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - README.md
+
+checksums:
+  name_template: "checksums.txt"
+
+source:
+  enabled: true
+  name_template: "{{ .ProjectName }}_{{ .Version }}_source"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  use: github
+  sort: asc
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Other
+      order: 999
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "Merge pull request"
+      - "Merge branch"
+
+release:
+  draft: false
+  prerelease: auto
+  name_template: "v{{ .Version }}"
