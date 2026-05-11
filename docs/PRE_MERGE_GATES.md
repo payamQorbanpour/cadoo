@@ -45,4 +45,3 @@ To make warns also block merging, set `request_changes_on: ["block", "warn"]`.
 The `/check` tool runs every entry in `.cadoo.yaml` `checks:`. Today its check
 run uses the per-tool default name (`cadoo`); if you want a separate gate per
 check, run `/check` on a label and configure branch protection accordingly.
-A dedicated per-check check-run name is on the Phase 7.x roadmap.
