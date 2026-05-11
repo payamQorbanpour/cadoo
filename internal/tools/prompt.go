@@ -90,6 +90,23 @@ func BuildDiffPrompt(in Input) string {
 				h.Title, h.Source, 1-h.Distance, truncateText(h.Text, 600))
 		}
 	}
+	if len(in.PriorFindings) > 0 {
+		b.WriteString("## Already posted on this PR — DO NOT restate or rephrase\n\n")
+		b.WriteString("Cadoo (you, in prior runs) has already left these inline comments. Skip any finding that is the same issue at the same location, even if you'd word it differently. Only surface a finding here if it is genuinely new (different bug, different location, or substantively different concern).\n\n")
+		for _, p := range in.PriorFindings {
+			loc := p.File
+			if p.LineStart > 0 {
+				if p.LineEnd > 0 && p.LineEnd != p.LineStart {
+					fmt.Fprintf(&b, "- [%s] %s:%d-%d — %s\n", p.Severity, loc, p.LineStart, p.LineEnd, p.Title)
+				} else {
+					fmt.Fprintf(&b, "- [%s] %s:%d — %s\n", p.Severity, loc, p.LineStart, p.Title)
+				}
+			} else {
+				fmt.Fprintf(&b, "- [%s] %s — %s\n", p.Severity, loc, p.Title)
+			}
+		}
+		b.WriteString("\n")
+	}
 	b.WriteString("## Diff\n\n")
 	for _, f := range in.Packed.Files {
 		fmt.Fprintf(&b, "### %s (%s, +%d -%d)\n```diff\n%s\n```\n\n",

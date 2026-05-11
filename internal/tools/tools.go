@@ -24,6 +24,18 @@ type FileReader interface {
 	ReadFile(ctx context.Context, path string) ([]byte, error)
 }
 
+// PriorFinding is a slim view of an inline comment Cadoo already posted on
+// the current PR. The orchestrator pre-loads these so tools can include
+// them in the prompt and discourage the model from restating known issues.
+type PriorFinding struct {
+	Tool      string
+	File      string
+	LineStart int
+	LineEnd   int
+	Severity  string
+	Title     string
+}
+
 // Input is the shared payload every tool receives from the orchestrator.
 type Input struct {
 	PR     *vcs.PullRequest
@@ -71,6 +83,11 @@ type Input struct {
 	// composite. Tools should treat it as opaque and pass it back to stores
 	// that key by repo (kb.Store, learnings.Store).
 	RepoKey string
+
+	// PriorFindings is everything Cadoo has already posted as inline
+	// comments on this PR (across all prior dispatches). Tools surface it
+	// in the prompt so the model doesn't restate known issues.
+	PriorFindings []PriorFinding
 }
 
 // Result is what a tool returns. Empty fields are treated as no-ops by the

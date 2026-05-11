@@ -225,6 +225,28 @@ func (d *Dispatcher) Run(ctx context.Context, job ToolJob) (retErr error) {
 	repoKey := string(job.Provider) + ":" + pr.RepoFullName
 	in.RepoKey = repoKey
 	in.LearningsStore = d.Learnings
+	if d.Posted != nil {
+		priorKey := findings.PRKey{
+			Provider:     string(job.Provider),
+			RepoFullName: pr.RepoFullName,
+			PRNumber:     pr.Number,
+		}
+		if posted, err := d.Posted.ListPostedFindings(ctx, priorKey); err == nil {
+			in.PriorFindings = make([]tools.PriorFinding, 0, len(posted))
+			for _, p := range posted {
+				in.PriorFindings = append(in.PriorFindings, tools.PriorFinding{
+					Tool:      p.Tool,
+					File:      p.File,
+					LineStart: p.LineStart,
+					LineEnd:   p.LineEnd,
+					Severity:  p.Severity,
+					Title:     p.Title,
+				})
+			}
+		} else {
+			slog.Debug("list prior findings", "err", err)
+		}
+	}
 	if d.Learnings != nil {
 		if rules, err := d.Learnings.Active(ctx, repoKey, 10, 0.6); err == nil {
 			in.Learnings = rules
@@ -366,8 +388,7 @@ func (d *Dispatcher) postInline(ctx context.Context, provider vcs.Provider, pr *
 	if tool != "" && d.Posted != nil {
 		delta = delta[:0]
 		for _, c := range comments {
-			fp := findings.Fingerprint(tool, c)
-			has, err := d.Posted.HasFinding(ctx, key, fp)
+			has, err := d.Posted.HasFinding(ctx, key, tool, c)
 			if err != nil {
 				slog.Debug("dedup lookup", "err", err)
 			}
@@ -386,8 +407,7 @@ func (d *Dispatcher) postInline(ctx context.Context, provider vcs.Provider, pr *
 	}
 	if tool != "" && d.Posted != nil {
 		for _, c := range delta {
-			fp := findings.Fingerprint(tool, c)
-			_ = d.Posted.RecordFinding(ctx, key, tool, fp, "", c)
+			_ = d.Posted.RecordFinding(ctx, key, tool, "", c)
 		}
 	}
 }
