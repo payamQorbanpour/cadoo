@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/Logo.png" alt="Cadoo logo" width="160" />
+  <img src="docs/assets/Logo.png" alt="Cadoo logo" width="360" />
 </p>
 
 # Cadoo
