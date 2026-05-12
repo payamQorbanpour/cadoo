@@ -176,13 +176,13 @@ func (a *Adapter) EditPullRequestBody(ctx context.Context, pr *vcs.PullRequest, 
 
 // PostInlineComments creates a single PR review with all inline comments.
 // Multi-line comments use start_line/line on the RIGHT side of the diff.
-func (a *Adapter) PostInlineComments(ctx context.Context, pr *vcs.PullRequest, comments []vcs.InlineComment) error {
+func (a *Adapter) PostInlineComments(ctx context.Context, pr *vcs.PullRequest, comments []vcs.InlineComment) ([]vcs.PostedInlineRef, error) {
 	if len(comments) == 0 {
-		return nil
+		return nil, nil
 	}
 	owner, name, err := splitRepo(pr.RepoFullName)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	drafts := make([]*gogithub.DraftReviewComment, 0, len(comments))
 	for _, c := range comments {
@@ -210,7 +210,26 @@ func (a *Adapter) PostInlineComments(ctx context.Context, pr *vcs.PullRequest, c
 			Event:    ptr("COMMENT"),
 			Comments: drafts,
 		})
-	return err
+	if err != nil {
+		return nil, err
+	}
+	// GitHub's review-create API returns the review, not per-comment IDs.
+	// We could re-list review comments here to recover them, but for now we
+	// surface refs with empty IDs — ResolveThread is a no-op on GitHub
+	// until we move to GraphQL resolveReviewThread.
+	refs := make([]vcs.PostedInlineRef, len(comments))
+	for i, c := range comments {
+		refs[i] = vcs.PostedInlineRef{Comment: c}
+	}
+	return refs, nil
+}
+
+// ResolveThread is a no-op on GitHub today: the REST review API doesn't
+// expose per-comment resolution and we don't yet talk to the GraphQL
+// resolveReviewThread mutation. Returning nil keeps the caller's
+// auto-resolve loop happy while GitLab does the real work.
+func (a *Adapter) ResolveThread(_ context.Context, _ *vcs.PullRequest, _ string) error {
+	return nil
 }
 
 // FetchArchive returns a gzipped tarball of the repo at ref. Used by the

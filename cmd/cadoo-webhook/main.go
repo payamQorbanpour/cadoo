@@ -196,6 +196,12 @@ func buildDispatcher(s *settings.Settings, pool *pgxpool.Pool) (*orchestrator.Di
 		d.Posted = findings.New(pool)
 		d.KBDistiller = &querydistill.Distiller{LLM: d.LLM, Model: s.DefaultModel}
 		slog.Info("knowledge layer enabled (kb + learnings + audit + posted-state + distiller)")
+	} else {
+		// No DB configured — fall back to an in-memory findings store so
+		// dedup still works for the lifetime of this process. Optional
+		// JSON file persists state across container restarts.
+		d.Posted = findings.NewMemory(s.FindingsCacheFile)
+		slog.Info("findings store: in-memory (no DB configured)", "persist_path", s.FindingsCacheFile)
 	}
 	d.Trackers = buildTrackers(s)
 	if s.SlackWebhookURL != "" {

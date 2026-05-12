@@ -3,10 +3,12 @@ package orchestrator
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"testing"
 
 	"github.com/payamqorbanpour/cadoo/internal/config"
+	"github.com/payamqorbanpour/cadoo/internal/findings"
 	"github.com/payamqorbanpour/cadoo/internal/llm"
 	"github.com/payamqorbanpour/cadoo/internal/tools"
 	"github.com/payamqorbanpour/cadoo/internal/vcs"
@@ -21,6 +23,7 @@ type fakeVCS struct {
 	checks     []vcs.CheckRunStatus
 	summary    string
 	editedBody string
+	resolved   []string
 }
 
 func (f *fakeVCS) Kind() vcs.Kind { return f.kind }
@@ -48,10 +51,20 @@ func (f *fakeVCS) EditPullRequestBody(_ context.Context, _ *vcs.PullRequest, bod
 	f.editedBody = body
 	return nil
 }
-func (f *fakeVCS) PostInlineComments(_ context.Context, _ *vcs.PullRequest, c []vcs.InlineComment) error {
+func (f *fakeVCS) PostInlineComments(_ context.Context, _ *vcs.PullRequest, c []vcs.InlineComment) ([]vcs.PostedInlineRef, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.inlineCnt += len(c)
+	refs := make([]vcs.PostedInlineRef, len(c))
+	for i, cc := range c {
+		refs[i] = vcs.PostedInlineRef{Comment: cc}
+	}
+	return refs, nil
+}
+func (f *fakeVCS) ResolveThread(_ context.Context, _ *vcs.PullRequest, id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.resolved = append(f.resolved, id)
 	return nil
 }
 func (f *fakeVCS) UpsertCheckRun(_ context.Context, _ *vcs.PullRequest, run vcs.CheckRun) error {
@@ -175,5 +188,65 @@ func TestDispatcherHandleDecodes(t *testing.T) {
 	payload, _ := json.Marshal(ToolJob{Tool: "review", RepoFullName: "o/r", PRNumber: 1})
 	if err := d.Handle(context.Background(), payload); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// idVCS extends fakeVCS to return a non-empty external ID for each posted
+// inline comment so the auto-resolve test has something to resolve against.
+type idVCS struct {
+	fakeVCS
+	nextID int
+}
+
+func (f *idVCS) PostInlineComments(_ context.Context, _ *vcs.PullRequest, c []vcs.InlineComment) ([]vcs.PostedInlineRef, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.inlineCnt += len(c)
+	refs := make([]vcs.PostedInlineRef, len(c))
+	for i, cc := range c {
+		f.nextID++
+		refs[i] = vcs.PostedInlineRef{Comment: cc, ExternalID: fmt.Sprintf("disc-%d", f.nextID)}
+	}
+	return refs, nil
+}
+
+func TestPostInlineResolvesStalePriors(t *testing.T) {
+	ctx := context.Background()
+	fv := &idVCS{fakeVCS: fakeVCS{
+		kind: vcs.KindGitLab,
+		pr:   &vcs.PullRequest{RepoFullName: "g/p", Number: 1, HeadSHA: "abc"},
+	}}
+	d := &Dispatcher{
+		VCSPool: map[vcs.Kind]vcs.Provider{vcs.KindGitLab: &fv.fakeVCS},
+		Posted:  findings.NewMemory(""),
+	}
+	pr := fv.pr
+	key := findings.PRKey{Provider: string(vcs.KindGitLab), RepoFullName: "g/p", PRNumber: 1}
+
+	// Run 1: post two findings, both get IDs.
+	first := []vcs.InlineComment{
+		{File: "a.go", LineStart: 1, Severity: "warn", Body: "Stale finding A"},
+		{File: "b.go", LineStart: 2, Severity: "warn", Body: "Surviving finding B"},
+	}
+	d.postInline(ctx, fv, pr, key, "review", first)
+
+	// Manually backfill IDs the way the real adapter would — fakeVCS
+	// returns empty IDs, so we re-record with synthetic IDs to simulate
+	// what idVCS-style adapters do in production.
+	for i, c := range first {
+		_ = d.Posted.RecordFinding(ctx, key, "review", fmt.Sprintf("disc-%d", i+1), c)
+	}
+
+	// Run 2: only the surviving finding remains.
+	second := []vcs.InlineComment{
+		{File: "b.go", LineStart: 2, Severity: "warn", Body: "Surviving finding B"},
+	}
+	d.postInline(ctx, fv, pr, key, "review", second)
+
+	if len(fv.resolved) != 1 {
+		t.Fatalf("expected exactly 1 resolved thread, got %d: %v", len(fv.resolved), fv.resolved)
+	}
+	if fv.resolved[0] != "disc-1" {
+		t.Errorf("expected disc-1 resolved (the stale prior), got %q", fv.resolved[0])
 	}
 }

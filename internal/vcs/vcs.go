@@ -67,6 +67,17 @@ type InlineComment struct {
 	Severity  Severity
 }
 
+// PostedInlineRef pairs an InlineComment with the provider-side identifier
+// the adapter created for it (GitLab discussion ID, GitHub review-comment
+// ID, etc.). Adapters that can't surface a per-comment ID in one call (the
+// classic example: GitHub's review-create API) leave ExternalID empty —
+// callers that need the ID for follow-up actions (resolve, update) must
+// degrade gracefully when it's missing.
+type PostedInlineRef struct {
+	Comment    InlineComment
+	ExternalID string
+}
+
 // CheckRunStatus is the high-level outcome posted to the VCS as a check.
 type CheckRunStatus string
 
@@ -97,7 +108,14 @@ type Provider interface {
 
 	PostSummaryComment(ctx context.Context, pr *PullRequest, body string) (id string, err error)
 	UpdateSummaryComment(ctx context.Context, pr *PullRequest, id, body string) error
-	PostInlineComments(ctx context.Context, pr *PullRequest, comments []InlineComment) error
+	PostInlineComments(ctx context.Context, pr *PullRequest, comments []InlineComment) ([]PostedInlineRef, error)
+
+	// ResolveThread marks a previously-posted inline discussion as resolved.
+	// Adapters whose provider has no notion of resolved threads, or whose
+	// PostInlineComments couldn't capture per-comment IDs, may return nil
+	// without doing anything. threadID is the same value PostInlineComments
+	// returned in PostedInlineRef.ExternalID.
+	ResolveThread(ctx context.Context, pr *PullRequest, threadID string) error
 
 	// EditPullRequestBody replaces the PR/MR description. The orchestrator
 	// uses this to inject Cadoo-managed sections (e.g. /describe) while

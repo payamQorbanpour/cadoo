@@ -7,9 +7,13 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/jackc/pgx/v5"
@@ -29,12 +33,13 @@ type PRKey struct {
 // inline comment. The dispatcher feeds these back into the next tool run so
 // the model knows not to restate them.
 type PostedFinding struct {
-	Tool      string
-	File      string
-	LineStart int
-	LineEnd   int
-	Severity  string
-	Title     string
+	Tool              string
+	File              string
+	LineStart         int
+	LineEnd           int
+	Severity          string
+	Title             string
+	ExternalCommentID string
 }
 
 // SimilarTitleThreshold is the Jaccard score above which two normalized
@@ -44,17 +49,30 @@ const SimilarTitleThreshold = 0.6
 
 // Store wraps the posted_findings + posted_summaries tables. A nil Store is
 // safe to call against; methods become no-ops returning zero values so the
-// dispatcher's hot path doesn't need nil-checks.
+// dispatcher's hot path doesn't need nil-checks. When `pool` is nil and
+// `mem` is set, the same surface is backed by an in-memory map — used by
+// deployments without a database (e.g. single-container docker setups).
 type Store struct {
 	pool *pgxpool.Pool
+	mem  *memoryStore
 }
 
-// New builds a Store.
+// New builds a Postgres-backed Store.
 func New(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
-// Enabled reports whether this Store can read/write — i.e. it has a non-nil
-// pgx pool. Callers use this to branch into a no-DB fallback path.
-func (s *Store) Enabled() bool { return s != nil && s.pool != nil }
+// NewMemory builds an in-memory Store. If persistPath is non-empty, the
+// store hydrates from that JSON file on startup and rewrites it on every
+// mutation, so dedup state survives container restarts. Hydration errors
+// are logged-soft (start empty) rather than failing construction, so the
+// process never refuses to boot just because the cache file is corrupt.
+func NewMemory(persistPath string) *Store {
+	return &Store{mem: newMemoryStore(persistPath)}
+}
+
+// Enabled reports whether this Store can read/write — either backend is
+// fine. Callers use this to branch into a no-dedup fallback when neither
+// is set (e.g. a literal nil *Store).
+func (s *Store) Enabled() bool { return s != nil && (s.pool != nil || s.mem != nil) }
 
 // Fingerprint hashes every field of an inline comment, body included. It is
 // kept as the table's idempotence guard: identical re-runs of the same tool
@@ -69,45 +87,58 @@ func Fingerprint(tool string, c vcs.InlineComment) string {
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
 
-// StructuralKey hashes only the stable location of a finding (tool, file,
-// line range, severity) — deliberately excluding the body. Two LLM
-// re-runs that rephrase the same finding at the same spot share a key, so
-// the title-similarity check below can recognize them as duplicates.
+// StructuralKey hashes the stable identity of a finding: tool, file,
+// severity, and normalized title. Line numbers are intentionally NOT in
+// the key — when a later commit shifts a finding's anchor, the key stays
+// the same so HasFinding still recognises it as a duplicate.
 func StructuralKey(tool string, c vcs.InlineComment) string {
 	h := sha1.New()
-	_, _ = fmt.Fprintf(h, "%s\x00%s\x00%d\x00%d\x00%s",
+	_, _ = fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s",
 		strings.ToLower(tool), strings.ToLower(c.File),
-		c.LineStart, c.LineEnd,
-		strings.ToLower(string(c.Severity)))
+		strings.ToLower(string(c.Severity)), normalizeTitle(c.Body))
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
 
 // HasFinding reports whether a near-duplicate of this comment has already
-// been posted on the PR. The lookup is two-stage: rows are filtered by the
-// structural key (same tool/file/line/severity), then any candidate whose
-// normalized title is sufficiently similar (Jaccard ≥ SimilarTitleThreshold)
-// is treated as the same finding.
+// been posted on the PR. Two-stage match:
+//   - Exact match on StructuralKey (tool, file, severity, normalized title)
+//     — catches re-runs that produce identical titles.
+//   - Jaccard ≥ SimilarTitleThreshold over the normalized title against
+//     every prior comment in the same (tool, file, severity) bucket —
+//     catches rephrasings that change a word or two.
 func (s *Store) HasFinding(ctx context.Context, key PRKey, tool string, c vcs.InlineComment) (bool, error) {
-	if s == nil || s.pool == nil {
+	if s == nil {
 		return false, nil
 	}
-	sk := StructuralKey(tool, c)
-	const q = `SELECT coalesce(normalized_title, lower(coalesce(title, '')))
+	if s.mem != nil {
+		return s.mem.has(key, tool, c), nil
+	}
+	if s.pool == nil {
+		return false, nil
+	}
+	const q = `SELECT structural_key,
+	                  coalesce(normalized_title, lower(coalesce(title, '')))
 		FROM posted_findings
 		WHERE provider = $1 AND repo_full_name = $2 AND pr_number = $3
-		  AND structural_key = $4`
-	rows, err := s.pool.Query(ctx, q, key.Provider, key.RepoFullName, key.PRNumber, sk)
+		  AND tool = $4 AND file = $5 AND severity = $6`
+	rows, err := s.pool.Query(ctx, q,
+		key.Provider, key.RepoFullName, key.PRNumber,
+		tool, c.File, string(c.Severity))
 	if err != nil {
 		return false, fmt.Errorf("has finding: %w", err)
 	}
 	defer rows.Close()
+	wantKey := StructuralKey(tool, c)
 	wantTokens := titleTokens(c.Body)
 	for rows.Next() {
-		var stored string
-		if err := rows.Scan(&stored); err != nil {
+		var storedKey, storedTitle string
+		if err := rows.Scan(&storedKey, &storedTitle); err != nil {
 			return false, fmt.Errorf("scan finding: %w", err)
 		}
-		if jaccard(wantTokens, tokenize(stored)) >= SimilarTitleThreshold {
+		if storedKey == wantKey {
+			return true, nil
+		}
+		if jaccard(wantTokens, tokenize(storedTitle)) >= SimilarTitleThreshold {
 			return true, nil
 		}
 	}
@@ -120,7 +151,14 @@ func (s *Store) HasFinding(ctx context.Context, key PRKey, tool string, c vcs.In
 // comments). The exact-fingerprint UNIQUE constraint absorbs accidental
 // double-records on the same dispatch.
 func (s *Store) RecordFinding(ctx context.Context, key PRKey, tool, externalCommentID string, c vcs.InlineComment) error {
-	if s == nil || s.pool == nil {
+	if s == nil {
+		return nil
+	}
+	if s.mem != nil {
+		s.mem.record(key, tool, externalCommentID, c)
+		return nil
+	}
+	if s.pool == nil {
 		return nil
 	}
 	const q = `
@@ -145,12 +183,18 @@ ON CONFLICT (provider, repo_full_name, pr_number, fingerprint) DO NOTHING`
 // PR. The dispatcher passes this into the next tool run so the model can
 // avoid restating known issues.
 func (s *Store) ListPostedFindings(ctx context.Context, key PRKey) ([]PostedFinding, error) {
-	if s == nil || s.pool == nil {
+	if s == nil {
+		return nil, nil
+	}
+	if s.mem != nil {
+		return s.mem.list(key), nil
+	}
+	if s.pool == nil {
 		return nil, nil
 	}
 	const q = `SELECT tool, coalesce(file, ''), coalesce(line_start, 0),
 	                  coalesce(line_end, 0), coalesce(severity, ''),
-	                  coalesce(title, '')
+	                  coalesce(title, ''), coalesce(external_comment_id, '')
 		FROM posted_findings
 		WHERE provider = $1 AND repo_full_name = $2 AND pr_number = $3
 		ORDER BY file, line_start, line_end`
@@ -162,7 +206,8 @@ func (s *Store) ListPostedFindings(ctx context.Context, key PRKey) ([]PostedFind
 	var out []PostedFinding
 	for rows.Next() {
 		var f PostedFinding
-		if err := rows.Scan(&f.Tool, &f.File, &f.LineStart, &f.LineEnd, &f.Severity, &f.Title); err != nil {
+		if err := rows.Scan(&f.Tool, &f.File, &f.LineStart, &f.LineEnd,
+			&f.Severity, &f.Title, &f.ExternalCommentID); err != nil {
 			return nil, fmt.Errorf("scan posted finding: %w", err)
 		}
 		out = append(out, f)
@@ -173,7 +218,13 @@ func (s *Store) ListPostedFindings(ctx context.Context, key PRKey) ([]PostedFind
 // SummaryID returns the prior summary-comment external ID for (PR, tool), or
 // empty if none.
 func (s *Store) SummaryID(ctx context.Context, key PRKey, tool string) (string, error) {
-	if s == nil || s.pool == nil {
+	if s == nil {
+		return "", nil
+	}
+	if s.mem != nil {
+		return s.mem.summaryID(key, tool), nil
+	}
+	if s.pool == nil {
 		return "", nil
 	}
 	const q = `SELECT external_comment_id FROM posted_summaries
@@ -190,7 +241,14 @@ func (s *Store) SummaryID(ctx context.Context, key PRKey, tool string) (string, 
 
 // PutSummaryID upserts the (PR, tool) → comment ID mapping.
 func (s *Store) PutSummaryID(ctx context.Context, key PRKey, tool, externalCommentID string) error {
-	if s == nil || s.pool == nil {
+	if s == nil {
+		return nil
+	}
+	if s.mem != nil {
+		s.mem.putSummaryID(key, tool, externalCommentID)
+		return nil
+	}
+	if s.pool == nil {
 		return nil
 	}
 	const q = `
@@ -220,7 +278,14 @@ type Section struct {
 // wrapper comment is identified by tool == WrapperToolKey, and stored without
 // a body (its external ID points at the comment that contains every section).
 func (s *Store) PutSection(ctx context.Context, key PRKey, tool, body string) error {
-	if s == nil || s.pool == nil {
+	if s == nil {
+		return nil
+	}
+	if s.mem != nil {
+		s.mem.putSection(key, tool, body)
+		return nil
+	}
+	if s.pool == nil {
 		return nil
 	}
 	const q = `
@@ -239,7 +304,13 @@ ON CONFLICT (provider, repo_full_name, pr_number, tool) DO UPDATE
 // tool name. Sections whose body is empty (e.g. wrapper bookkeeping rows)
 // are skipped.
 func (s *Store) AllSections(ctx context.Context, key PRKey) ([]Section, error) {
-	if s == nil || s.pool == nil {
+	if s == nil {
+		return nil, nil
+	}
+	if s.mem != nil {
+		return s.mem.allSections(key), nil
+	}
+	if s.pool == nil {
 		return nil, nil
 	}
 	const q = `SELECT tool, body FROM posted_summaries
@@ -358,4 +429,279 @@ func jaccard(a, b []string) float64 {
 		return 0
 	}
 	return float64(inter) / float64(union)
+}
+
+// memoryStore is the no-DB backend for Store. It is intentionally
+// process-local; a docker container that restarts will start with an empty
+// cache (and may re-post one batch of comments) unless a persistPath was
+// supplied. The mutex covers every map access — webhook events for the
+// same PR can land concurrently on a single worker.
+type memoryStore struct {
+	mu        sync.Mutex
+	findings  map[PRKey][]findingRec
+	summaries map[summaryRefKey]string
+	sections  map[PRKey]map[string]string
+	path      string
+}
+
+type findingRec struct {
+	Tool            string `json:"tool"`
+	File            string `json:"file"`
+	Severity        string `json:"severity"`
+	StructuralKey   string `json:"sk"`
+	Fingerprint     string `json:"fp"`
+	NormalizedTitle string `json:"nt"`
+	Title           string `json:"title"`
+	LineStart       int    `json:"ls"`
+	LineEnd         int    `json:"le"`
+	ExternalID      string `json:"eid,omitempty"`
+}
+
+type summaryRefKey struct {
+	PR   PRKey
+	Tool string
+}
+
+// persistedState is the on-disk JSON shape. Maps with struct keys can't be
+// JSON-encoded directly, so PRKey is flattened into a string of the form
+// "provider|repo|number".
+type persistedState struct {
+	Findings  map[string][]findingRec      `json:"findings"`
+	Summaries map[string]string            `json:"summaries"`
+	Sections  map[string]map[string]string `json:"sections"`
+}
+
+func newMemoryStore(path string) *memoryStore {
+	m := &memoryStore{
+		findings:  map[PRKey][]findingRec{},
+		summaries: map[summaryRefKey]string{},
+		sections:  map[PRKey]map[string]string{},
+		path:      path,
+	}
+	m.load()
+	return m
+}
+
+func (m *memoryStore) has(key PRKey, tool string, c vcs.InlineComment) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	wantKey := StructuralKey(tool, c)
+	wantTokens := titleTokens(c.Body)
+	for _, r := range m.findings[key] {
+		if r.Tool != tool || r.File != c.File || r.Severity != string(c.Severity) {
+			continue
+		}
+		if r.StructuralKey == wantKey {
+			return true
+		}
+		if jaccard(wantTokens, tokenize(r.NormalizedTitle)) >= SimilarTitleThreshold {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *memoryStore) record(key PRKey, tool, externalID string, c vcs.InlineComment) {
+	rec := findingRec{
+		Tool:            tool,
+		File:            c.File,
+		Severity:        string(c.Severity),
+		StructuralKey:   StructuralKey(tool, c),
+		Fingerprint:     Fingerprint(tool, c),
+		NormalizedTitle: normalizeTitle(c.Body),
+		Title:           firstLine(c.Body),
+		LineStart:       c.LineStart,
+		LineEnd:         c.LineEnd,
+		ExternalID:      externalID,
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, existing := range m.findings[key] {
+		if existing.Fingerprint == rec.Fingerprint {
+			// Idempotent: same exact comment already recorded. If the
+			// caller has now learned the external ID (earlier record
+			// happened with empty), backfill it so future resolves work.
+			if existing.ExternalID == "" && externalID != "" {
+				m.findings[key][i].ExternalID = externalID
+				m.persist()
+			}
+			return
+		}
+	}
+	m.findings[key] = append(m.findings[key], rec)
+	m.persist()
+}
+
+func (m *memoryStore) list(key PRKey) []PostedFinding {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	recs := m.findings[key]
+	if len(recs) == 0 {
+		return nil
+	}
+	out := make([]PostedFinding, 0, len(recs))
+	for _, r := range recs {
+		out = append(out, PostedFinding{
+			Tool:              r.Tool,
+			File:              r.File,
+			LineStart:         r.LineStart,
+			LineEnd:           r.LineEnd,
+			Severity:          r.Severity,
+			Title:             r.Title,
+			ExternalCommentID: r.ExternalID,
+		})
+	}
+	return out
+}
+
+func (m *memoryStore) summaryID(key PRKey, tool string) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.summaries[summaryRefKey{PR: key, Tool: tool}]
+}
+
+func (m *memoryStore) putSummaryID(key PRKey, tool, id string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.summaries[summaryRefKey{PR: key, Tool: tool}] = id
+	m.persist()
+}
+
+func (m *memoryStore) putSection(key PRKey, tool, body string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.sections[key] == nil {
+		m.sections[key] = map[string]string{}
+	}
+	m.sections[key][tool] = body
+	m.persist()
+}
+
+func (m *memoryStore) allSections(key PRKey) []Section {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	bucket := m.sections[key]
+	if len(bucket) == 0 {
+		return nil
+	}
+	// Stable order: sort by tool name to match the DB ORDER BY tool.
+	tools := make([]string, 0, len(bucket))
+	for t, body := range bucket {
+		if t == WrapperToolKey || body == "" {
+			continue
+		}
+		tools = append(tools, t)
+	}
+	// insertion-sort: bucket is tiny in practice (a handful of tools).
+	for i := 1; i < len(tools); i++ {
+		for j := i; j > 0 && tools[j] < tools[j-1]; j-- {
+			tools[j], tools[j-1] = tools[j-1], tools[j]
+		}
+	}
+	out := make([]Section, 0, len(tools))
+	for _, t := range tools {
+		out = append(out, Section{Tool: t, Body: bucket[t]})
+	}
+	return out
+}
+
+// load hydrates the in-memory maps from the JSON file at m.path. Missing
+// file is fine; malformed file is logged-soft by leaving the store empty so
+// the process can still boot.
+func (m *memoryStore) load() {
+	if m.path == "" {
+		return
+	}
+	data, err := os.ReadFile(m.path)
+	if err != nil {
+		return // missing or unreadable — start empty
+	}
+	var p persistedState
+	if err := json.Unmarshal(data, &p); err != nil {
+		return // corrupt file — start empty rather than refusing to boot
+	}
+	for encoded, recs := range p.Findings {
+		if k, ok := decodePRKey(encoded); ok {
+			m.findings[k] = recs
+		}
+	}
+	for encoded, id := range p.Summaries {
+		k, tool, ok := decodeSummaryKey(encoded)
+		if !ok {
+			continue
+		}
+		m.summaries[summaryRefKey{PR: k, Tool: tool}] = id
+	}
+	for encoded, body := range p.Sections {
+		if k, ok := decodePRKey(encoded); ok {
+			m.sections[k] = body
+		}
+	}
+}
+
+// persist writes the maps back to m.path. Best-effort: errors are ignored
+// because the next mutation will retry, and an unwritable cache file
+// shouldn't crash the dispatcher.
+func (m *memoryStore) persist() {
+	if m.path == "" {
+		return
+	}
+	p := persistedState{
+		Findings:  map[string][]findingRec{},
+		Summaries: map[string]string{},
+		Sections:  map[string]map[string]string{},
+	}
+	for k, recs := range m.findings {
+		p.Findings[encodePRKey(k)] = recs
+	}
+	for k, id := range m.summaries {
+		p.Summaries[encodeSummaryKey(k.PR, k.Tool)] = id
+	}
+	for k, body := range m.sections {
+		p.Sections[encodePRKey(k)] = body
+	}
+	data, err := json.Marshal(p)
+	if err != nil {
+		return
+	}
+	tmp := m.path + ".tmp"
+	if err := os.MkdirAll(filepath.Dir(m.path), 0o755); err != nil {
+		return
+	}
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return
+	}
+	_ = os.Rename(tmp, m.path) // atomic-ish replace
+}
+
+func encodePRKey(k PRKey) string {
+	return fmt.Sprintf("%s|%s|%d", k.Provider, k.RepoFullName, k.PRNumber)
+}
+
+func decodePRKey(s string) (PRKey, bool) {
+	parts := strings.SplitN(s, "|", 3)
+	if len(parts) != 3 {
+		return PRKey{}, false
+	}
+	var n int64
+	if _, err := fmt.Sscanf(parts[2], "%d", &n); err != nil {
+		return PRKey{}, false
+	}
+	return PRKey{Provider: parts[0], RepoFullName: parts[1], PRNumber: n}, true
+}
+
+func encodeSummaryKey(k PRKey, tool string) string {
+	return encodePRKey(k) + "|" + tool
+}
+
+func decodeSummaryKey(s string) (PRKey, string, bool) {
+	parts := strings.SplitN(s, "|", 4)
+	if len(parts) != 4 {
+		return PRKey{}, "", false
+	}
+	var n int64
+	if _, err := fmt.Sscanf(parts[2], "%d", &n); err != nil {
+		return PRKey{}, "", false
+	}
+	return PRKey{Provider: parts[0], RepoFullName: parts[1], PRNumber: n}, parts[3], true
 }

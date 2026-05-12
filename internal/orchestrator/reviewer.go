@@ -384,6 +384,14 @@ func (d *Dispatcher) applyPRBody(ctx context.Context, provider vcs.Provider, pr 
 }
 
 func (d *Dispatcher) postInline(ctx context.Context, provider vcs.Provider, pr *vcs.PullRequest, key findings.PRKey, tool string, comments []vcs.InlineComment) {
+	// Snapshot prior findings before we filter — we need them to compute
+	// which threads went stale on this run.
+	var prior []findings.PostedFinding
+	if tool != "" && d.Posted != nil {
+		prior, _ = d.Posted.ListPostedFindings(ctx, key)
+	}
+
+	// Filter out comments the dedup layer already knows about.
 	delta := comments
 	if tool != "" && d.Posted != nil {
 		delta = delta[:0]
@@ -398,16 +406,59 @@ func (d *Dispatcher) postInline(ctx context.Context, provider vcs.Provider, pr *
 			delta = append(delta, c)
 		}
 	}
-	if len(delta) == 0 {
+
+	if len(delta) > 0 {
+		refs, err := provider.PostInlineComments(ctx, pr, delta)
+		if err != nil {
+			slog.Error("post inline review", "err", err, "pr", pr.URL)
+			// Fall through: refs may still hold the partial set the adapter
+			// managed to post (especially the per-comment GitLab path).
+		}
+		if tool != "" && d.Posted != nil {
+			for _, ref := range refs {
+				_ = d.Posted.RecordFinding(ctx, key, tool, ref.ExternalID, ref.Comment)
+			}
+		}
+	}
+
+	// Auto-resolve threads whose finding the model didn't repeat this
+	// run. Only acts on this tool's own priors so /describe doesn't
+	// resolve /review threads (or vice versa). Skips priors with no
+	// external ID — we have nothing to resolve against.
+	d.resolveStalePriors(ctx, provider, pr, tool, prior, comments)
+}
+
+// resolveStalePriors walks prior findings for the given tool, computes
+// whether each one is still in the current run's output (by structural
+// key, which is line-agnostic), and asks the provider to resolve the
+// thread for any prior that's gone missing. Best-effort: errors are logged
+// and the loop continues so one flaky resolve doesn't stop the rest.
+func (d *Dispatcher) resolveStalePriors(ctx context.Context, provider vcs.Provider, pr *vcs.PullRequest, tool string, prior []findings.PostedFinding, current []vcs.InlineComment) {
+	if tool == "" || len(prior) == 0 {
 		return
 	}
-	if err := provider.PostInlineComments(ctx, pr, delta); err != nil {
-		slog.Error("post inline review", "err", err, "pr", pr.URL)
-		return
+	currentKeys := make(map[string]struct{}, len(current))
+	for _, c := range current {
+		currentKeys[findings.StructuralKey(tool, c)] = struct{}{}
 	}
-	if tool != "" && d.Posted != nil {
-		for _, c := range delta {
-			_ = d.Posted.RecordFinding(ctx, key, tool, "", c)
+	for _, p := range prior {
+		if p.Tool != tool || p.ExternalCommentID == "" {
+			continue
+		}
+		// Reconstruct an InlineComment shape so StructuralKey produces
+		// the same value it did when the prior was recorded. We only
+		// need the fields the key reads (file, severity, body's first
+		// line); the stored Title is exactly that first line.
+		pkey := findings.StructuralKey(p.Tool, vcs.InlineComment{
+			File:     p.File,
+			Severity: vcs.Severity(p.Severity),
+			Body:     p.Title,
+		})
+		if _, present := currentKeys[pkey]; present {
+			continue
+		}
+		if err := provider.ResolveThread(ctx, pr, p.ExternalCommentID); err != nil {
+			slog.Debug("resolve stale thread", "err", err, "pr", pr.URL, "thread", p.ExternalCommentID)
 		}
 	}
 }

@@ -60,6 +60,12 @@ type Settings struct {
 	// path; defaults to "docker".
 	SandboxImage     string
 	SandboxDockerBin string
+
+	// FindingsCacheFile is an optional JSON file path used by the in-memory
+	// findings store to persist dedup state across container restarts. Only
+	// consulted when DATABASE_URL is unset (i.e. no Postgres backend); when
+	// empty, the in-memory store is purely process-local.
+	FindingsCacheFile string
 }
 
 // FromEnv reads settings from process environment.
@@ -90,8 +96,9 @@ func FromEnv() (*Settings, error) {
 		OIDCClientID:    os.Getenv("OIDC_CLIENT_ID"),
 		ReportsInterval: os.Getenv("REPORTS_INTERVAL"),
 
-		SandboxImage:     os.Getenv("CADOO_SANDBOX_IMAGE"),
-		SandboxDockerBin: os.Getenv("CADOO_SANDBOX_DOCKER_BIN"),
+		SandboxImage:      os.Getenv("CADOO_SANDBOX_IMAGE"),
+		SandboxDockerBin:  os.Getenv("CADOO_SANDBOX_DOCKER_BIN"),
+		FindingsCacheFile: os.Getenv("CADOO_FINDINGS_CACHE_FILE"),
 	}
 
 	if v := os.Getenv("GITHUB_APP_ID"); v != "" {

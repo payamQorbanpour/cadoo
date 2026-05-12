@@ -127,26 +127,27 @@ func (a *Adapter) EditPullRequestBody(ctx context.Context, pr *vcs.PullRequest, 
 // the file:line in the body) so they aren't silently lost — GitLab rejects
 // positions it can't compute a line_code for. Failures on individual comments
 // are returned as the first error after a best-effort attempt at the rest.
-func (a *Adapter) PostInlineComments(ctx context.Context, pr *vcs.PullRequest, comments []vcs.InlineComment) error {
+func (a *Adapter) PostInlineComments(ctx context.Context, pr *vcs.PullRequest, comments []vcs.InlineComment) ([]vcs.PostedInlineRef, error) {
 	if len(comments) == 0 {
-		return nil
+		return nil, nil
 	}
 	mr, _, err := a.client.MergeRequests.GetMergeRequest(pr.RepoFullName, pr.Number,
 		&glab.GetMergeRequestsOptions{}, glab.WithContext(ctx))
 	if err != nil {
-		return fmt.Errorf("get mr for diff refs: %w", err)
+		return nil, fmt.Errorf("get mr for diff refs: %w", err)
 	}
 	if mr.DiffRefs.HeadSha == "" {
-		return fmt.Errorf("mr %s!%d has no diff_refs", pr.RepoFullName, pr.Number)
+		return nil, fmt.Errorf("mr %s!%d has no diff_refs", pr.RepoFullName, pr.Number)
 	}
 
 	diffs, _, err := a.client.MergeRequests.ListMergeRequestDiffs(pr.RepoFullName, pr.Number,
 		&glab.ListMergeRequestDiffsOptions{}, glab.WithContext(ctx))
 	if err != nil {
-		return fmt.Errorf("list mr diffs for positions: %w", err)
+		return nil, fmt.Errorf("list mr diffs for positions: %w", err)
 	}
 	idx := indexDiffs(diffs)
 
+	refs := make([]vcs.PostedInlineRef, 0, len(comments))
 	var firstErr error
 	for _, c := range comments {
 		body := formatSeverity(c.Severity) + c.Body
@@ -159,10 +160,13 @@ func (a *Adapter) PostInlineComments(ctx context.Context, pr *vcs.PullRequest, c
 		if !ok {
 			// Target line isn't in any hunk for this file — GitLab would
 			// reject the position. Post a non-positional note instead so the
-			// finding still reaches the MR.
+			// finding still reaches the MR. Unanchored notes have no
+			// "resolve" concept, so we return an empty ExternalID and let
+			// the caller skip them on cleanup.
 			if err := a.postUnanchoredNote(ctx, pr, c.File, line, body); err != nil && firstErr == nil {
 				firstErr = err
 			}
+			refs = append(refs, vcs.PostedInlineRef{Comment: c})
 			continue
 		}
 
@@ -186,13 +190,23 @@ func (a *Adapter) PostInlineComments(ctx context.Context, pr *vcs.PullRequest, c
 			Body:     ptr(body),
 			Position: pos,
 		}
-		if _, _, err := a.client.Discussions.CreateMergeRequestDiscussion(
+		disc, _, err := a.client.Discussions.CreateMergeRequestDiscussion(
 			pr.RepoFullName, pr.Number, opts, glab.WithContext(ctx),
-		); err != nil && firstErr == nil {
-			firstErr = fmt.Errorf("create discussion at %s:%d: %w", c.File, line, err)
+		)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("create discussion at %s:%d: %w", c.File, line, err)
+			}
+			refs = append(refs, vcs.PostedInlineRef{Comment: c})
+			continue
 		}
+		id := ""
+		if disc != nil {
+			id = disc.ID
+		}
+		refs = append(refs, vcs.PostedInlineRef{Comment: c, ExternalID: id})
 	}
-	return firstErr
+	return refs, firstErr
 }
 
 // postUnanchoredNote posts a regular MR note for a finding whose target line
@@ -208,6 +222,25 @@ func (a *Adapter) postUnanchoredNote(ctx context.Context, pr *vcs.PullRequest, f
 		&glab.CreateMergeRequestNoteOptions{Body: ptr(text)}, glab.WithContext(ctx))
 	if err != nil {
 		return fmt.Errorf("create note for %s: %w", loc, err)
+	}
+	return nil
+}
+
+// ResolveThread marks the given MR discussion as resolved. threadID is the
+// discussion ID returned by PostInlineComments. Unanchored notes (which
+// have no discussion ID and no "resolved" concept in GitLab) are silently
+// skipped — callers pass an empty threadID for them.
+func (a *Adapter) ResolveThread(ctx context.Context, pr *vcs.PullRequest, threadID string) error {
+	if threadID == "" {
+		return nil
+	}
+	_, _, err := a.client.Discussions.ResolveMergeRequestDiscussion(
+		pr.RepoFullName, pr.Number, threadID,
+		&glab.ResolveMergeRequestDiscussionOptions{Resolved: ptr(true)},
+		glab.WithContext(ctx),
+	)
+	if err != nil {
+		return fmt.Errorf("resolve discussion %s: %w", threadID, err)
 	}
 	return nil
 }
