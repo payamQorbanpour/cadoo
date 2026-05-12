@@ -122,9 +122,11 @@ func (a *Adapter) EditPullRequestBody(ctx context.Context, pr *vcs.PullRequest, 
 }
 
 // PostInlineComments creates one MR discussion per inline comment, anchored
-// to a position object built from the MR's diff_refs. Failures on individual
-// comments are returned as the first error after a best-effort attempt at
-// the rest.
+// to a position object built from the MR's diff_refs. Comments whose target
+// line falls outside any diff hunk are downgraded to top-level MR notes (with
+// the file:line in the body) so they aren't silently lost — GitLab rejects
+// positions it can't compute a line_code for. Failures on individual comments
+// are returned as the first error after a best-effort attempt at the rest.
 func (a *Adapter) PostInlineComments(ctx context.Context, pr *vcs.PullRequest, comments []vcs.InlineComment) error {
 	if len(comments) == 0 {
 		return nil
@@ -138,6 +140,13 @@ func (a *Adapter) PostInlineComments(ctx context.Context, pr *vcs.PullRequest, c
 		return fmt.Errorf("mr %s!%d has no diff_refs", pr.RepoFullName, pr.Number)
 	}
 
+	diffs, _, err := a.client.MergeRequests.ListMergeRequestDiffs(pr.RepoFullName, pr.Number,
+		&glab.ListMergeRequestDiffsOptions{}, glab.WithContext(ctx))
+	if err != nil {
+		return fmt.Errorf("list mr diffs for positions: %w", err)
+	}
+	idx := indexDiffs(diffs)
+
 	var firstErr error
 	for _, c := range comments {
 		body := formatSeverity(c.Severity) + c.Body
@@ -145,20 +154,37 @@ func (a *Adapter) PostInlineComments(ctx context.Context, pr *vcs.PullRequest, c
 		if line == 0 {
 			line = c.LineStart
 		}
-		if line == 0 {
-			line = 1
+
+		anchor, ok := idx.lookup(c.File, line)
+		if !ok {
+			// Target line isn't in any hunk for this file — GitLab would
+			// reject the position. Post a non-positional note instead so the
+			// finding still reaches the MR.
+			if err := a.postUnanchoredNote(ctx, pr, c.File, line, body); err != nil && firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+
+		pos := &glab.PositionOptions{
+			BaseSHA:      ptr(mr.DiffRefs.BaseSha),
+			StartSHA:     ptr(mr.DiffRefs.StartSha),
+			HeadSHA:      ptr(mr.DiffRefs.HeadSha),
+			PositionType: ptr("text"),
+			NewPath:      ptr(anchor.newPath),
+			OldPath:      ptr(anchor.oldPath),
+		}
+		if anchor.newLine > 0 {
+			pos.NewLine = ptr(int64(anchor.newLine))
+		}
+		// Context lines need both new_line and old_line so GitLab can compute
+		// a stable line_code; deleted lines only carry old_line.
+		if anchor.oldLine > 0 && (anchor.newLine == 0 || anchor.context) {
+			pos.OldLine = ptr(int64(anchor.oldLine))
 		}
 		opts := &glab.CreateMergeRequestDiscussionOptions{
-			Body: ptr(body),
-			Position: &glab.PositionOptions{
-				BaseSHA:      ptr(mr.DiffRefs.BaseSha),
-				StartSHA:     ptr(mr.DiffRefs.StartSha),
-				HeadSHA:      ptr(mr.DiffRefs.HeadSha),
-				PositionType: ptr("text"),
-				NewPath:      ptr(c.File),
-				OldPath:      ptr(c.File),
-				NewLine:      ptr(int64(line)),
-			},
+			Body:     ptr(body),
+			Position: pos,
 		}
 		if _, _, err := a.client.Discussions.CreateMergeRequestDiscussion(
 			pr.RepoFullName, pr.Number, opts, glab.WithContext(ctx),
@@ -167,6 +193,23 @@ func (a *Adapter) PostInlineComments(ctx context.Context, pr *vcs.PullRequest, c
 		}
 	}
 	return firstErr
+}
+
+// postUnanchoredNote posts a regular MR note for a finding whose target line
+// is outside the diff, so the feedback isn't dropped when GitLab refuses the
+// position.
+func (a *Adapter) postUnanchoredNote(ctx context.Context, pr *vcs.PullRequest, file string, line int, body string) error {
+	loc := file
+	if line > 0 {
+		loc = fmt.Sprintf("%s:%d", file, line)
+	}
+	text := fmt.Sprintf("`%s` (outside diff)\n\n%s", loc, body)
+	_, _, err := a.client.Notes.CreateMergeRequestNote(pr.RepoFullName, pr.Number,
+		&glab.CreateMergeRequestNoteOptions{Body: ptr(text)}, glab.WithContext(ctx))
+	if err != nil {
+		return fmt.Errorf("create note for %s: %w", loc, err)
+	}
+	return nil
 }
 
 // UpsertCheckRun maps the abstract check run to a GitLab commit status on
@@ -260,6 +303,133 @@ func mapCheckStatus(s vcs.CheckRunStatus) glab.BuildStateValue {
 		return glab.Success
 	}
 	return glab.Pending
+}
+
+// diffAnchor describes a line of an MR diff that an inline comment can be
+// anchored to. context=true means the line is unchanged in the hunk, which
+// requires both new_line and old_line in the position payload.
+type diffAnchor struct {
+	newPath string
+	oldPath string
+	newLine int
+	oldLine int
+	context bool
+}
+
+// diffIndex maps (file, new_line) -> anchor for every line present in the MR
+// diff. Built once per PostInlineComments call so each comment can decide
+// whether GitLab will accept a position for it.
+type diffIndex struct {
+	byFile map[string]map[int]diffAnchor
+}
+
+func (i *diffIndex) lookup(file string, newLine int) (diffAnchor, bool) {
+	if i == nil || file == "" || newLine <= 0 {
+		return diffAnchor{}, false
+	}
+	lines, ok := i.byFile[file]
+	if !ok {
+		return diffAnchor{}, false
+	}
+	a, ok := lines[newLine]
+	return a, ok
+}
+
+// indexDiffs walks every MR diff and indexes each hunk line by its new-file
+// line number so callers can answer "is this line in the diff, and how should
+// I anchor a comment to it?".
+func indexDiffs(diffs []*glab.MergeRequestDiff) *diffIndex {
+	idx := &diffIndex{byFile: make(map[string]map[int]diffAnchor, len(diffs))}
+	for _, d := range diffs {
+		if d == nil || d.Diff == "" {
+			continue
+		}
+		newPath := d.NewPath
+		if newPath == "" {
+			newPath = d.OldPath
+		}
+		oldPath := d.OldPath
+		if oldPath == "" {
+			oldPath = newPath
+		}
+		key := newPath
+		if key == "" {
+			continue
+		}
+		lines := idx.byFile[key]
+		if lines == nil {
+			lines = make(map[int]diffAnchor)
+			idx.byFile[key] = lines
+		}
+		var newNo, oldNo int
+		inHunk := false
+		for _, raw := range strings.Split(d.Diff, "\n") {
+			if strings.HasPrefix(raw, "@@") {
+				o, n, ok := parseHunkHeader(raw)
+				if !ok {
+					inHunk = false
+					continue
+				}
+				oldNo, newNo = o, n
+				inHunk = true
+				continue
+			}
+			if !inHunk || strings.HasPrefix(raw, "+++") || strings.HasPrefix(raw, "---") || strings.HasPrefix(raw, "\\") {
+				continue
+			}
+			switch {
+			case strings.HasPrefix(raw, "+"):
+				lines[newNo] = diffAnchor{newPath: newPath, oldPath: oldPath, newLine: newNo}
+				newNo++
+			case strings.HasPrefix(raw, "-"):
+				// Deleted lines have no new_line slot, so the orchestrator's
+				// new-file-line addressing can't reach them — skip.
+				oldNo++
+			default:
+				lines[newNo] = diffAnchor{newPath: newPath, oldPath: oldPath, newLine: newNo, oldLine: oldNo, context: true}
+				newNo++
+				oldNo++
+			}
+		}
+	}
+	return idx
+}
+
+// parseHunkHeader extracts (oldStart, newStart) from a unified-diff hunk
+// header like "@@ -12,3 +14,5 @@ optional section".
+func parseHunkHeader(h string) (oldStart, newStart int, ok bool) {
+	rest := strings.TrimPrefix(h, "@@")
+	if i := strings.Index(rest, "@@"); i >= 0 {
+		rest = rest[:i]
+	}
+	var sawOld, sawNew bool
+	for _, p := range strings.Fields(rest) {
+		switch {
+		case strings.HasPrefix(p, "-"):
+			n := strings.TrimPrefix(p, "-")
+			if c := strings.IndexByte(n, ','); c >= 0 {
+				n = n[:c]
+			}
+			v, err := strconv.Atoi(n)
+			if err != nil {
+				return 0, 0, false
+			}
+			oldStart = v
+			sawOld = true
+		case strings.HasPrefix(p, "+"):
+			n := strings.TrimPrefix(p, "+")
+			if c := strings.IndexByte(n, ','); c >= 0 {
+				n = n[:c]
+			}
+			v, err := strconv.Atoi(n)
+			if err != nil {
+				return 0, 0, false
+			}
+			newStart = v
+			sawNew = true
+		}
+	}
+	return oldStart, newStart, sawOld && sawNew
 }
 
 // countDiffLines returns (additions, deletions) by counting +/- lines in a
