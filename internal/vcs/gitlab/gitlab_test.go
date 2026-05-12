@@ -8,10 +8,10 @@ import (
 
 func TestParseHunkHeader(t *testing.T) {
 	cases := []struct {
-		in           string
-		oldStart     int
-		newStart     int
-		ok           bool
+		in       string
+		oldStart int
+		newStart int
+		ok       bool
 	}{
 		{"@@ -1,3 +1,4 @@", 1, 1, true},
 		{"@@ -12,0 +13,5 @@ func foo()", 12, 13, true},
