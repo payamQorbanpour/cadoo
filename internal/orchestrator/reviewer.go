@@ -391,18 +391,31 @@ func (d *Dispatcher) postInline(ctx context.Context, provider vcs.Provider, pr *
 		prior, _ = d.Posted.ListPostedFindings(ctx, key)
 	}
 
-	// Filter out comments the dedup layer already knows about.
+	// Two-stage filter: (a) drop comments the Posted store already knows
+	// about (cross-dispatch dedup), (b) drop comments whose StructuralKey
+	// already appeared earlier in this same batch (intra-dispatch dedup).
+	// Stage (b) runs even when Posted is unset — the CLI path has no DB,
+	// and without it two near-duplicate suggestions from one improve run
+	// would both slip through HasFinding (neither has been recorded yet).
 	delta := comments
-	if tool != "" && d.Posted != nil {
+	if tool != "" {
 		delta = delta[:0]
+		seenKeys := make(map[string]struct{}, len(comments))
 		for _, c := range comments {
-			has, err := d.Posted.HasFinding(ctx, key, tool, c)
-			if err != nil {
-				slog.Debug("dedup lookup", "err", err)
+			if d.Posted != nil {
+				has, err := d.Posted.HasFinding(ctx, key, tool, c)
+				if err != nil {
+					slog.Debug("dedup lookup", "err", err)
+				}
+				if has {
+					continue
+				}
 			}
-			if has {
+			sk := findings.StructuralKey(tool, c)
+			if _, dup := seenKeys[sk]; dup {
 				continue
 			}
+			seenKeys[sk] = struct{}{}
 			delta = append(delta, c)
 		}
 	}
