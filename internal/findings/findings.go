@@ -45,7 +45,7 @@ type PostedFinding struct {
 // SimilarTitleThreshold is the Jaccard score above which two normalized
 // titles are treated as the same finding. Exported so tests (and future
 // per-tool tuning) can override.
-const SimilarTitleThreshold = 0.6
+const SimilarTitleThreshold = 0.5
 
 // Store wraps the posted_findings + posted_summaries tables. A nil Store is
 // safe to call against; methods become no-ops returning zero values so the
@@ -67,6 +67,20 @@ func New(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 // process never refuses to boot just because the cache file is corrupt.
 func NewMemory(persistPath string) *Store {
 	return &Store{mem: newMemoryStore(persistPath)}
+}
+
+// DefaultCachePath returns a sensible persistence path for the in-memory
+// findings store when no DB is configured. Uses os.UserCacheDir() so the
+// file lands under ~/.cache/cadoo on Linux, ~/Library/Caches/cadoo on
+// macOS, or %LocalAppData%\cadoo on Windows. Returns "" if no cache
+// directory can be determined — callers should treat that as "stay
+// process-local".
+func DefaultCachePath() string {
+	dir, err := os.UserCacheDir()
+	if err != nil || dir == "" {
+		return ""
+	}
+	return filepath.Join(dir, "cadoo", "findings.json")
 }
 
 // Enabled reports whether this Store can read/write — either backend is
@@ -352,22 +366,55 @@ func titleTokens(body string) []string {
 	return tokenize(normalizeTitle(body))
 }
 
-// normalizeTitle returns a stable, lowercase, punctuation-stripped form of
-// the comment's first line. Markdown bold (`**…**`) wrapping the title and
-// a leading `[severity]` tag are removed so the same finding looks the same
-// regardless of which tool added the decoration.
+// normalizeTitle returns a lowercased fingerprint of the comment's
+// user-facing content, used by both StructuralKey (for exact match) and
+// titleTokens (for the Jaccard rephrase check). It walks up to ~200
+// characters of body, drops fenced code blocks, and strips markdown
+// bullets, bold wrappers, and a leading `[severity]` tag — so the same
+// finding looks the same regardless of which tool added the decoration,
+// and tools like `improve` whose every body shares a static
+// `**Suggestions:**` header still produce a key that varies with the
+// actual suggestion content.
 func normalizeTitle(body string) string {
-	t := firstLine(body)
-	t = strings.TrimSpace(t)
-	t = strings.TrimPrefix(t, "**")
-	t = strings.TrimSuffix(t, "**")
-	// Strip a leading "[whatever]" tag (e.g. "[WARN]", "[block]").
-	if strings.HasPrefix(t, "[") {
-		if end := strings.IndexByte(t, ']'); end > 0 {
-			t = strings.TrimSpace(t[end+1:])
+	const budget = 200
+	var sb strings.Builder
+	inFence := false
+	for raw := range strings.SplitSeq(body, "\n") {
+		line := strings.TrimSpace(raw)
+		if strings.HasPrefix(line, "```") {
+			inFence = !inFence
+			continue
+		}
+		if inFence || line == "" {
+			continue
+		}
+		// Strip markdown bullet markers, bold wrappers, and a leading
+		// [tag] (e.g. "[WARN]") so rephrasings still share tokens.
+		line = strings.TrimPrefix(line, "- ")
+		line = strings.TrimPrefix(line, "* ")
+		line = strings.TrimPrefix(line, "**")
+		line = strings.TrimSuffix(line, "**")
+		if strings.HasPrefix(line, "[") {
+			if end := strings.IndexByte(line, ']'); end > 0 {
+				line = strings.TrimSpace(line[end+1:])
+			}
+		}
+		if line == "" {
+			continue
+		}
+		if sb.Len() > 0 {
+			sb.WriteByte(' ')
+		}
+		sb.WriteString(line)
+		if sb.Len() >= budget {
+			break
 		}
 	}
-	return strings.ToLower(t)
+	s := sb.String()
+	if len(s) > budget {
+		s = s[:budget]
+	}
+	return strings.ToLower(s)
 }
 
 // stopwords are filler that adds noise to title comparison without changing

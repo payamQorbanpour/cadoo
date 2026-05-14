@@ -3,6 +3,7 @@ package findings
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/payamqorbanpour/cadoo/internal/vcs"
@@ -66,7 +67,9 @@ func TestStructuralKeyDistinguishesFileAndSeverity(t *testing.T) {
 
 func TestNormalizeTitleStripsTagAndEmphasis(t *testing.T) {
 	cases := map[string]string{
-		"**Deferred rows.Close() silently discards errors**\n\nBody…": "deferred rows.close() silently discards errors",
+		// Bold wrapper + a body line: both contribute now that the
+		// fingerprint walks past the first line.
+		"**Deferred rows.Close() silently discards errors**\n\nBody…": "deferred rows.close() silently discards errors body…",
 		"[WARN] Deferred rows.Close() silently discards close errors": "deferred rows.close() silently discards close errors",
 		"  plain title  ": "plain title",
 	}
@@ -74,6 +77,22 @@ func TestNormalizeTitleStripsTagAndEmphasis(t *testing.T) {
 		if got := normalizeTitle(in); got != want {
 			t.Errorf("normalizeTitle(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestNormalizeTitleSkipsCodeFencesAndHeader(t *testing.T) {
+	// The improve tool renders every body as a static **Suggestions:**
+	// header followed by the actual action and a fenced code block.
+	// The fingerprint must vary with the action text — otherwise every
+	// suggestion in a file collapses to the same StructuralKey.
+	body1 := "**Suggestions:**\n- Fail fast on Kafka producer init error\n\n```suggestion\nx := 1\n```"
+	body2 := "**Suggestions:**\n- Reject invalid payload before queuing\n\n```suggestion\ny := 2\n```"
+	a, b := normalizeTitle(body1), normalizeTitle(body2)
+	if a == b {
+		t.Fatalf("distinct suggestions must produce distinct normalized titles; both = %q", a)
+	}
+	if strings.Contains(a, "```") || strings.Contains(b, "```") {
+		t.Errorf("code fences should be stripped; got %q / %q", a, b)
 	}
 }
 

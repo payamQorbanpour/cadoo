@@ -210,34 +210,32 @@ func (f *idVCS) PostInlineComments(_ context.Context, _ *vcs.PullRequest, c []vc
 	return refs, nil
 }
 
-// TestPostInlineCollapsesIntraBatchDuplicates covers the !238 incident:
-// the improve tool renders every body with the static "**Suggestions:**"
-// header, so two suggestions in the same file share a StructuralKey. Without
-// intra-batch tracking both pass HasFinding (neither is recorded yet) and
-// both get posted. The CLI path (Posted == nil) is the worst case because
-// the cross-batch dedup branch is skipped entirely.
-func TestPostInlineCollapsesIntraBatchDuplicates(t *testing.T) {
+// TestPostInlineKeepsDistinctSuggestionsInBatch is the !238 follow-up:
+// two genuinely-different improve suggestions on the same file must both
+// be posted, even though their bodies share the static "**Suggestions:**"
+// header. An earlier fix keyed StructuralKey on just the first line and
+// collapsed them to one — wrong. normalizeTitle now walks past the
+// static header and into the action text so the keys differ.
+func TestPostInlineKeepsDistinctSuggestionsInBatch(t *testing.T) {
 	ctx := context.Background()
 	pr := &vcs.PullRequest{RepoFullName: "g/p", Number: 238, HeadSHA: "abc"}
 	key := findings.PRKey{Provider: string(vcs.KindGitLab), RepoFullName: "g/p", PRNumber: 238}
 
-	// Mirrors improve.go renderSuggestionBody output: identical "**Suggestions:**"
-	// first line, different bullet text and suggestion code per comment.
 	c1 := vcs.InlineComment{
 		File: "internal/v1/api/run.go", LineStart: 302, LineEnd: 302,
 		Body: "**Suggestions:**\n- Fail fast on Kafka producer init error when enabled\n\n```suggestion\nx := 1\n```",
 	}
 	c2 := vcs.InlineComment{
 		File: "internal/v1/api/run.go", LineStart: 303, LineEnd: 303,
-		Body: "**Suggestions:**\n- Fail fast on Kafka init error; silent continuation loses refresh tasks\n\n```suggestion\ny := 2\n```",
+		Body: "**Suggestions:**\n- Reject invalid payload before queuing\n\n```suggestion\ny := 2\n```",
 	}
 
 	t.Run("cli path with nil Posted store", func(t *testing.T) {
 		fv := &fakeVCS{kind: vcs.KindGitLab, pr: pr}
 		d := &Dispatcher{VCSPool: map[vcs.Kind]vcs.Provider{vcs.KindGitLab: fv}}
 		d.postInline(ctx, fv, pr, key, "improve", []vcs.InlineComment{c1, c2})
-		if fv.inlineCnt != 1 {
-			t.Fatalf("expected 1 comment posted (intra-batch dedup), got %d", fv.inlineCnt)
+		if fv.inlineCnt != 2 {
+			t.Fatalf("expected 2 distinct suggestions posted, got %d", fv.inlineCnt)
 		}
 	})
 
@@ -248,10 +246,30 @@ func TestPostInlineCollapsesIntraBatchDuplicates(t *testing.T) {
 			Posted:  findings.NewMemory(""),
 		}
 		d.postInline(ctx, fv, pr, key, "improve", []vcs.InlineComment{c1, c2})
-		if fv.inlineCnt != 1 {
-			t.Fatalf("expected 1 comment posted (intra-batch dedup), got %d", fv.inlineCnt)
+		if fv.inlineCnt != 2 {
+			t.Fatalf("expected 2 distinct suggestions posted, got %d", fv.inlineCnt)
 		}
 	})
+}
+
+// TestPostInlineCollapsesIdenticalDuplicatesInBatch covers the defensive
+// case the intra-batch seenKeys check exists for: a tool emits the same
+// finding twice in one run. Both rows pass HasFinding (neither recorded
+// yet) so only the in-batch tracking can drop the second one.
+func TestPostInlineCollapsesIdenticalDuplicatesInBatch(t *testing.T) {
+	ctx := context.Background()
+	pr := &vcs.PullRequest{RepoFullName: "g/p", Number: 239, HeadSHA: "abc"}
+	key := findings.PRKey{Provider: string(vcs.KindGitLab), RepoFullName: "g/p", PRNumber: 239}
+
+	body := "**Suggestions:**\n- Fail fast on Kafka producer init error\n\n```suggestion\nx := 1\n```"
+	dup := vcs.InlineComment{File: "internal/v1/api/run.go", LineStart: 302, LineEnd: 302, Body: body}
+
+	fv := &fakeVCS{kind: vcs.KindGitLab, pr: pr}
+	d := &Dispatcher{VCSPool: map[vcs.Kind]vcs.Provider{vcs.KindGitLab: fv}}
+	d.postInline(ctx, fv, pr, key, "improve", []vcs.InlineComment{dup, dup})
+	if fv.inlineCnt != 1 {
+		t.Fatalf("expected 1 comment posted (intra-batch dedup of identical bodies), got %d", fv.inlineCnt)
+	}
 }
 
 func TestPostInlineResolvesStalePriors(t *testing.T) {

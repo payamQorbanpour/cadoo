@@ -198,10 +198,17 @@ func buildDispatcher(s *settings.Settings, pool *pgxpool.Pool) (*orchestrator.Di
 		slog.Info("knowledge layer enabled (kb + learnings + audit + posted-state + distiller)")
 	} else {
 		// No DB configured — fall back to an in-memory findings store so
-		// dedup still works for the lifetime of this process. Optional
-		// JSON file persists state across container restarts.
-		d.Posted = findings.NewMemory(s.FindingsCacheFile)
-		slog.Info("findings store: in-memory (no DB configured)", "persist_path", s.FindingsCacheFile)
+		// dedup still works for the lifetime of this process. We default
+		// to a JSON file under the user's cache dir so the store survives
+		// container restarts even when the operator hasn't set
+		// CADOO_FINDINGS_CACHE_FILE explicitly; without persistence each
+		// restart re-posts everything.
+		path := s.FindingsCacheFile
+		if path == "" {
+			path = findings.DefaultCachePath()
+		}
+		d.Posted = findings.NewMemory(path)
+		slog.Info("findings store: in-memory (no DB configured)", "persist_path", path)
 	}
 	d.Trackers = buildTrackers(s)
 	if s.SlackWebhookURL != "" {
