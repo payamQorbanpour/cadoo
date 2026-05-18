@@ -98,23 +98,29 @@ rendered markdown:
 <!-- cadoo:fp v=1 tool=review sk=9f3a1c2b7d4e5061 sev=warn -->
 ```
 
-- Injected in one provider-agnostic place: `postInline` in `reviewer.go`, immediately
-  before `provider.PostInlineComments(ctx, pr, delta)`, via a helper
-  `findings.StampInline(tool, c) string`.
-- `sk` is exactly `findings.StructuralKey(tool, c)`. Read-back recovers the *same* key the
-  dedup logic compares against — no re-derivation from rendered text.
+- Injected in one provider-agnostic place: `postInline` in `reviewer.go`. Mechanism:
+  `postInline` builds a **stamped copy slice** — for each `c` in `delta`, a clone with
+  `Body = c.Body + "\n\n" + findings.InlineMarker(tool, c)` — and passes *that copy* to
+  `provider.PostInlineComments`. The original `delta` slice is untouched.
+- Key computation, `HasFinding`, and `RecordFinding` all operate on the **original**
+  `delta` entries, never on the stamped copies and never on `ref.Comment` bodies echoed
+  back by the adapter. `delta`↔`refs` pairing is by index (both adapters already return
+  exactly one `PostedInlineRef` per input comment, in input order); `RecordFinding` is
+  called with `delta[i]` (pristine) and `refs[i].ExternalID`.
+- `sk` is exactly `findings.StructuralKey(tool, c)` over the pristine body. Read-back
+  recovers the *same* key from the marker — no re-derivation from rendered text.
 - The **overview** needs no new marker: `renderConsolidated` already wraps it in
   `wrapperBegin`/`wrapperEnd`. Read-back finds the comment containing `wrapperBegin` and
   uses its ID as `SummaryCommentID`.
 
 **Correctness rule — the marker must never poison the keys.** `StructuralKey`,
-`Fingerprint`, and `RecordFinding` all hash `c.Body`. The marker is appended only to a
-separate `stampedBody` sent over the wire; `c.Body` stays pristine for every key
-computation and for `RecordFinding`. On read-back the `sk` is parsed *from the marker*
-(authoritative), not recomputed from rendered text. This keeps stateless dedup
-byte-identical to DB-mode dedup. `Title` (first visible line) is unaffected because the
-marker is appended last, so the existing `resolveStalePriors` re-derivation lands the same
-value it does in DB-mode.
+`Fingerprint`, and `RecordFinding` all hash `c.Body`. The marker lives only on the stamped
+copy slice sent over the wire; the original `delta` entries stay pristine, and all key
+computation / `HasFinding` / `RecordFinding` use those pristine entries (not `ref.Comment`).
+On read-back the `sk` is parsed *from the marker* (authoritative), not recomputed from
+rendered text. This keeps stateless dedup byte-identical to DB-mode dedup. `Title` (first
+visible line) is unaffected because the marker is appended last, so the existing
+`resolveStalePriors` re-derivation lands the same value it does in DB-mode.
 
 DB-mode is unchanged except that posted inline bodies now also carry the invisible marker —
 a free self-healing upgrade for that path too.
@@ -201,9 +207,10 @@ PRNumber}` inside `applyResult`; `NewFromPrior` keys on the same tuple — no pl
 
 ### 7. Testing
 
-- Unit: `StampInline` stamp/parse round-trip; `NewFromPrior` seeding →
+- Unit: `InlineMarker` build/parse round-trip; stamped-copy isolation (original `delta`
+  entry's `Body` unchanged after stamping); `NewFromPrior` seeding →
   `HasFinding`/`ListPostedFindings`/`SummaryID` assertions; marker never alters
-  `StructuralKey`/`Fingerprint`.
+  `StructuralKey`/`Fingerprint` of the pristine comment.
 - Adapter: GitLab `ListCadooArtifacts` against `httptest` fixtures; GitHub GraphQL
   query + `resolveReviewThread` mutation against `httptest` canned JSON; GHES endpoint
   derivation.
