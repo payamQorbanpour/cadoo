@@ -399,7 +399,7 @@ func (d *Dispatcher) postInline(ctx context.Context, provider vcs.Provider, pr *
 	// would both slip through HasFinding (neither has been recorded yet).
 	delta := comments
 	if tool != "" {
-		delta = delta[:0]
+		delta = make([]vcs.InlineComment, 0, len(comments))
 		seenKeys := make(map[string]struct{}, len(comments))
 		for _, c := range comments {
 			if d.Posted != nil {
