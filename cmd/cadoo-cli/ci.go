@@ -10,6 +10,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/payamqorbanpour/cadoo/internal/config"
+	"github.com/payamqorbanpour/cadoo/internal/findings"
 	"github.com/payamqorbanpour/cadoo/internal/llm/litellm"
 	"github.com/payamqorbanpour/cadoo/internal/orchestrator"
 	"github.com/payamqorbanpour/cadoo/internal/vcs"
@@ -178,6 +180,13 @@ func ciCmd(args []string) {
 	}
 
 	ctx := context.Background()
+
+	if rr, ok := provider.(vcs.PriorReviewReader); ok {
+		if st := priorStore(ctx, rr, target.ProjectPath, target.Number, target.Provider); st != nil {
+			d.Posted = st
+		}
+	}
+
 	toolList := splitCSV(*toolsCSV)
 	if len(toolList) == 0 {
 		fmt.Fprintln(os.Stderr, "ci: --tools is empty")
@@ -222,6 +231,22 @@ func ciCmd(args []string) {
 	if firstErr != nil {
 		os.Exit(1)
 	}
+}
+
+// priorStore reconstructs an in-memory findings.Store from the PR's own
+// prior Cadoo artifacts so stateless CI-mode is idempotent across pushes.
+// Returns nil when the read fails — callers then degrade to the
+// non-idempotent legacy behaviour.
+func priorStore(ctx context.Context, r vcs.PriorReviewReader, repo string, number int64, provider vcs.Kind) *findings.Store {
+	pr := &vcs.PullRequest{Provider: provider, RepoFullName: repo, Number: number}
+	snap, err := r.ListCadooArtifacts(ctx, pr)
+	if err != nil {
+		slog.Warn("ci: prior-artifact read-back failed; comments may duplicate this run",
+			"err", err, "repo", repo, "number", number)
+		return nil
+	}
+	key := findings.PRKey{Provider: string(provider), RepoFullName: repo, PRNumber: number}
+	return findings.NewFromPrior(key, snap)
 }
 
 // buildProvider wires the right VCS adapter for the parsed target, reading

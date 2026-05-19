@@ -1,9 +1,14 @@
 package gitlab
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	glab "gitlab.com/gitlab-org/api/client-go"
+
+	"github.com/payamqorbanpour/cadoo/internal/vcs"
 )
 
 func TestParseHunkHeader(t *testing.T) {
@@ -95,5 +100,43 @@ func TestIndexDiffs_Rename(t *testing.T) {
 	a, ok := idx.lookup("new/path.go", 2)
 	if !ok || a.newPath != "new/path.go" || a.oldPath != "old/path.go" {
 		t.Errorf("rename anchor: got %+v ok=%v", a, ok)
+	}
+}
+
+func TestListCadooArtifactsGitLab(t *testing.T) {
+	const discJSON = `[
+	  {"id":"disc-abc","notes":[{"id":11,"system":false,"resolved":false,
+	    "position":{"new_path":"a.go","old_path":"a.go"},
+	    "body":"**[WARN]** Fix the leak.\n\n<!-- cadoo:fp v=1 tool=review sk=deadbeefdeadbeef sev=warn -->"}]},
+	  {"id":"disc-ov","notes":[{"id":22,"system":false,"resolved":false,
+	    "body":"` + vcs.SummaryWrapperBegin + ` consolidated overview here"}]}
+	]`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Total-Pages", "1")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(discJSON))
+	}))
+	defer srv.Close()
+
+	a, err := New(Config{BaseURL: srv.URL, Token: "t"})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	pr := &vcs.PullRequest{RepoFullName: "g/p", Number: 7}
+	got, err := a.ListCadooArtifacts(context.Background(), pr)
+	if err != nil {
+		t.Fatalf("ListCadooArtifacts: %v", err)
+	}
+	if got.SummaryCommentID != "22" {
+		t.Errorf("SummaryCommentID = %q; want 22", got.SummaryCommentID)
+	}
+	if len(got.Inline) != 1 {
+		t.Fatalf("inline count = %d; want 1", len(got.Inline))
+	}
+	in := got.Inline[0]
+	if in.StructuralKey != "deadbeefdeadbeef" || in.Tool != "review" ||
+		in.File != "a.go" || in.Severity != "warn" ||
+		in.ExternalID != "disc-abc" || in.Title != "Fix the leak." || in.Resolved {
+		t.Errorf("inline = %+v; want sk=deadbeefdeadbeef tool=review file=a.go sev=warn id=disc-abc title=%q resolved=false", in, "Fix the leak.")
 	}
 }

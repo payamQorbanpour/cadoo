@@ -4,19 +4,41 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 
 	"github.com/payamqorbanpour/cadoo/internal/llm"
 )
 
+// defaultMaxTokens is the completion-token budget for tool LLM calls. The
+// previous hardcoded 4096 truncated /describe's JSON on real merge requests
+// (finish_reason=length → unparseable output); 8192 is a safer floor and is
+// overridable via CADOO_MAX_TOKENS for models/gateways with larger budgets.
+const defaultMaxTokens = 8192
+
+// maxTokens returns the configured completion-token budget. CADOO_MAX_TOKENS
+// overrides defaultMaxTokens when set to a positive integer; invalid or
+// non-positive values fall back to the default.
+func maxTokens() int {
+	if v := os.Getenv("CADOO_MAX_TOKENS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return defaultMaxTokens
+}
+
 // CallJSON sends one chat completion and unmarshals the first JSON object
 // out of the response into dst. Tools share this helper since they all want
-// structured output.
+// structured output. An empty completion or a length-truncated completion is
+// reported as an explicit, actionable error rather than a cryptic JSON
+// parser failure, and finish_reason is surfaced for diagnosability.
 func CallJSON(ctx context.Context, p llm.Provider, model, system, user string, dst any) error {
 	resp, err := p.Chat(ctx, llm.ChatRequest{
 		Model:       model,
 		Temperature: 0.2,
-		MaxTokens:   4096,
+		MaxTokens:   maxTokens(),
 		Messages: []llm.Message{
 			{Role: llm.RoleSystem, Content: system},
 			{Role: llm.RoleUser, Content: user},
@@ -25,18 +47,26 @@ func CallJSON(ctx context.Context, p llm.Provider, model, system, user string, d
 	if err != nil {
 		return fmt.Errorf("llm call: %w", err)
 	}
+	if resp.Content == "" {
+		return fmt.Errorf("llm: empty completion (finish_reason=%q) — gateway returned no content", resp.FinishReason)
+	}
+	if resp.FinishReason == "length" {
+		return fmt.Errorf("llm: completion truncated at max_tokens (finish_reason=length, %d chars) — raise CADOO_MAX_TOKENS", len(resp.Content))
+	}
 	if err := ExtractJSON(resp.Content, dst); err != nil {
-		return fmt.Errorf("%w (raw: %q)", err, truncate(resp.Content, 200))
+		return fmt.Errorf("%w (finish_reason=%q, raw: %q)", err, resp.FinishReason, truncate(resp.Content, 200))
 	}
 	return nil
 }
 
-// CallText sends one chat completion and returns the trimmed content.
+// CallText sends one chat completion and returns the trimmed content. Empty
+// or length-truncated completions are reported as explicit errors instead of
+// silently returning an empty / partial string.
 func CallText(ctx context.Context, p llm.Provider, model, system, user string) (string, error) {
 	resp, err := p.Chat(ctx, llm.ChatRequest{
 		Model:       model,
 		Temperature: 0.3,
-		MaxTokens:   4096,
+		MaxTokens:   maxTokens(),
 		Messages: []llm.Message{
 			{Role: llm.RoleSystem, Content: system},
 			{Role: llm.RoleUser, Content: user},
@@ -45,7 +75,14 @@ func CallText(ctx context.Context, p llm.Provider, model, system, user string) (
 	if err != nil {
 		return "", fmt.Errorf("llm call: %w", err)
 	}
-	return strings.TrimSpace(resp.Content), nil
+	trimmed := strings.TrimSpace(resp.Content)
+	if trimmed == "" {
+		return "", fmt.Errorf("llm: empty completion (finish_reason=%q) — gateway returned no content", resp.FinishReason)
+	}
+	if resp.FinishReason == "length" {
+		return "", fmt.Errorf("llm: completion truncated at max_tokens (finish_reason=length, %d chars) — raise CADOO_MAX_TOKENS", len(resp.Content))
+	}
+	return trimmed, nil
 }
 
 // ExtractJSON finds the first {...} object in s and unmarshals it into dst.

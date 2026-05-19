@@ -226,6 +226,56 @@ func (a *Adapter) postUnanchoredNote(ctx context.Context, pr *vcs.PullRequest, f
 	return nil
 }
 
+// ListCadooArtifacts implements vcs.PriorReviewReader. It walks the MR's
+// discussions, recognising Cadoo's own comments by the hidden marker (inline
+// findings) and by SummaryWrapperBegin (the overview note), so stateless
+// CI-mode can rebuild dedup state from the MR itself.
+func (a *Adapter) ListCadooArtifacts(ctx context.Context, pr *vcs.PullRequest) (vcs.PriorReview, error) {
+	var out vcs.PriorReview
+	opt := &glab.ListMergeRequestDiscussionsOptions{}
+	opt.ListOptions = glab.ListOptions{PerPage: 100, Page: 1}
+	for {
+		discs, resp, err := a.client.Discussions.ListMergeRequestDiscussions(
+			pr.RepoFullName, pr.Number, opt, glab.WithContext(ctx))
+		if err != nil {
+			return vcs.PriorReview{}, fmt.Errorf("list mr discussions: %w", err)
+		}
+		for _, d := range discs {
+			for _, n := range d.Notes {
+				if n == nil || n.System {
+					continue
+				}
+				md, stripped, ok := vcs.ParseInlineMarker(n.Body)
+				if ok && n.Position != nil {
+					file := n.Position.NewPath
+					if file == "" {
+						file = n.Position.OldPath
+					}
+					orig := strings.TrimPrefix(stripped, formatSeverity(vcs.Severity(md.Sev)))
+					out.Inline = append(out.Inline, vcs.PriorInline{
+						Tool:          md.Tool,
+						File:          file,
+						Severity:      md.Sev,
+						StructuralKey: md.SK,
+						Title:         vcs.FirstLine(strings.TrimSpace(orig)),
+						ExternalID:    d.ID,
+						Resolved:      n.Resolved,
+					})
+					continue
+				}
+				if n.Position == nil && strings.Contains(n.Body, vcs.SummaryWrapperBegin) {
+					out.SummaryCommentID = strconv.FormatInt(n.ID, 10)
+				}
+			}
+		}
+		if resp == nil || resp.NextPage == 0 {
+			break
+		}
+		opt.Page = resp.NextPage
+	}
+	return out, nil
+}
+
 // ResolveThread marks the given MR discussion as resolved. threadID is the
 // discussion ID returned by PostInlineComments. Unanchored notes (which
 // have no discussion ID and no "resolved" concept in GitLab) are silently

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/payamqorbanpour/cadoo/internal/findings"
+	"github.com/payamqorbanpour/cadoo/internal/vcs"
 )
 
 // HTML markers delimit Cadoo-managed regions in PR bodies and the
@@ -13,7 +14,7 @@ import (
 // the wrapper renders cleanly in both GitHub and GitLab markdown while
 // remaining machine-greppable on subsequent runs.
 const (
-	wrapperBegin   = "<!-- cadoo:wrapper:begin -->"
+	wrapperBegin   = vcs.SummaryWrapperBegin
 	wrapperEnd     = "<!-- cadoo:wrapper:end -->"
 	prSectionBegin = "<!-- cadoo:pr-body:begin -->"
 	prSectionEnd   = "<!-- cadoo:pr-body:end -->"

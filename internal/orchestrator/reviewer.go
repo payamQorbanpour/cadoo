@@ -399,7 +399,7 @@ func (d *Dispatcher) postInline(ctx context.Context, provider vcs.Provider, pr *
 	// would both slip through HasFinding (neither has been recorded yet).
 	delta := comments
 	if tool != "" {
-		delta = delta[:0]
+		delta = make([]vcs.InlineComment, 0, len(comments))
 		seenKeys := make(map[string]struct{}, len(comments))
 		for _, c := range comments {
 			if d.Posted != nil {
@@ -421,15 +421,32 @@ func (d *Dispatcher) postInline(ctx context.Context, provider vcs.Provider, pr *
 	}
 
 	if len(delta) > 0 {
-		refs, err := provider.PostInlineComments(ctx, pr, delta)
+		// Stamp a separate wire copy with the hidden dedup marker. The
+		// original delta entries stay pristine — they are what we hash for
+		// keys and what we record, so the marker can never poison
+		// StructuralKey/Fingerprint.
+		wire := make([]vcs.InlineComment, len(delta))
+		for i, c := range delta {
+			wc := c
+			if tool != "" {
+				wc.Body = findings.StampInline(tool, c)
+			}
+			wire[i] = wc
+		}
+		refs, err := provider.PostInlineComments(ctx, pr, wire)
 		if err != nil {
 			slog.Error("post inline review", "err", err, "pr", pr.URL)
 			// Fall through: refs may still hold the partial set the adapter
 			// managed to post (especially the per-comment GitLab path).
 		}
 		if tool != "" && d.Posted != nil {
-			for _, ref := range refs {
-				_ = d.Posted.RecordFinding(ctx, key, tool, ref.ExternalID, ref.Comment)
+			// Adapters return exactly one ref per input comment, in input
+			// order. Pair each ref with its PRISTINE delta entry by index.
+			for i := range refs {
+				if i >= len(delta) {
+					break
+				}
+				_ = d.Posted.RecordFinding(ctx, key, tool, refs[i].ExternalID, delta[i])
 			}
 		}
 	}
