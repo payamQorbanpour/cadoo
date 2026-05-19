@@ -388,9 +388,13 @@ func (s *scenarioVCS) replay() vcs.PriorReview {
 	for i, c := range s.inline {
 		md, stripped, _ := vcs.ParseInlineMarker(c.Body)
 		pr.Inline = append(pr.Inline, vcs.PriorInline{
-			Tool: md.Tool, File: c.File, Severity: md.Sev,
-			StructuralKey: md.SK, Title: vcs.FirstLine(stripped),
-			ExternalID: fmt.Sprintf("T%d", i+1),
+			Tool:            md.Tool,
+			File:            c.File,
+			Severity:        md.Sev,
+			StructuralKey:   md.SK,
+			Title:           vcs.FirstLine(stripped),
+			NormalizedTitle: md.NT,
+			ExternalID:      fmt.Sprintf("T%d", i+1),
 		})
 	}
 	return pr
@@ -434,5 +438,46 @@ func TestCIModeTwoRunIdempotency(t *testing.T) {
 	}
 	if !strings.Contains(sv.summaryBody, "second pass") {
 		t.Errorf("run2 summaryBody = %q; want it to contain \"second pass\"", sv.summaryBody)
+	}
+}
+
+// TestCIModeSuppressesRephrasedImproveOnPush2 is the regression test for the
+// CI-mode runaway duplication bug: "improve" suggestions were re-posted on
+// every push because the seeded in-memory store only stored the first-line
+// normalised title ("suggestions:"), which made the Jaccard fallback useless
+// (intersection of 1 token vs many tokens is well below the 0.5 threshold).
+//
+// With the fix, StampInline embeds the full-body NT in the marker, ListCadoo-
+// Artifacts parses it, and NewFromPrior seeds NormalizedTitle from md.NT so
+// the Jaccard check can correctly catch rephrased suggestions.
+func TestCIModeSuppressesRephrasedImproveOnPush2(t *testing.T) {
+	ctx := context.Background()
+	sv := &scenarioVCS{}
+	pr := &vcs.PullRequest{RepoFullName: "g/p", Number: 1}
+	key := findings.PRKey{Provider: "gitlab", RepoFullName: "g/p", PRNumber: 1}
+
+	// Push-1 improve suggestion.
+	body1 := "**Suggestions:**\n- Fail fast on Kafka producer init error when enabled\n\n```suggestion\nx := 1\n```"
+	c1 := vcs.InlineComment{File: "a.go", Body: body1, Severity: vcs.SeverityNit}
+
+	d1 := &Dispatcher{Posted: findings.NewFromPrior(key, vcs.PriorReview{})}
+	d1.postInline(ctx, sv, pr, key, "improve", []vcs.InlineComment{c1})
+	if len(sv.inline) != 1 {
+		t.Fatalf("push1: expected 1 inline, got %d", len(sv.inline))
+	}
+
+	// --- Push 2: same suggestion, LLM slightly rephrases the rationale. ---
+	prior := sv.replay()
+	sv.inline = nil
+
+	// Rephrased body: same issue, slightly different wording.
+	body2 := "**Suggestions:**\n- Fail fast on Kafka producer init error when it is enabled\n\n```suggestion\nx := 1\n```"
+	c2 := vcs.InlineComment{File: "a.go", Body: body2, Severity: vcs.SeverityNit}
+
+	d2 := &Dispatcher{Posted: findings.NewFromPrior(key, prior)}
+	d2.postInline(ctx, sv, pr, key, "improve", []vcs.InlineComment{c2})
+
+	if len(sv.inline) != 0 {
+		t.Errorf("push2: rephrased improve suggestion was not deduped; got %d new posts (expected 0)", len(sv.inline))
 	}
 }

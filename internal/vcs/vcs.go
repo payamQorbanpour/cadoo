@@ -142,11 +142,12 @@ type PriorReview struct {
 
 // PriorInline is one previously-posted Cadoo inline finding.
 type PriorInline struct {
-	Tool          string
-	File          string
-	Severity      string
-	StructuralKey string // parsed from the hidden marker (authoritative)
-	Title         string // first visible line of the original body
-	ExternalID    string // discussion/thread id for ResolveThread; "" if unrecoverable
-	Resolved      bool   // already resolved upstream — don't re-resolve
+	Tool            string
+	File            string
+	Severity        string
+	StructuralKey   string // parsed from the hidden marker (authoritative)
+	Title           string // first visible line of the original body
+	NormalizedTitle string // full-body normalizeTitle result from marker nt= field; "" for legacy markers
+	ExternalID      string // discussion/thread id for ResolveThread; "" if unrecoverable
+	Resolved        bool   // already resolved upstream — don't re-resolve
 }

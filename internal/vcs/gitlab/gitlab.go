@@ -253,13 +253,34 @@ func (a *Adapter) ListCadooArtifacts(ctx context.Context, pr *vcs.PullRequest) (
 					}
 					orig := strings.TrimPrefix(stripped, formatSeverity(vcs.Severity(md.Sev)))
 					out.Inline = append(out.Inline, vcs.PriorInline{
-						Tool:          md.Tool,
-						File:          file,
-						Severity:      md.Sev,
-						StructuralKey: md.SK,
-						Title:         vcs.FirstLine(strings.TrimSpace(orig)),
-						ExternalID:    d.ID,
-						Resolved:      n.Resolved,
+						Tool:            md.Tool,
+						File:            file,
+						Severity:        md.Sev,
+						StructuralKey:   md.SK,
+						Title:           vcs.FirstLine(strings.TrimSpace(orig)),
+						NormalizedTitle: md.NT,
+						ExternalID:      d.ID,
+						Resolved:        n.Resolved,
+					})
+					continue
+				}
+				if ok && n.Position == nil {
+					// Unanchored note: posted for a line outside the diff at the
+					// time. The note body starts with "`file:line` (outside diff)"
+					// — extract the file path so dedup suppresses re-posts on
+					// subsequent runs. ExternalID is empty because unanchored notes
+					// have no resolvable discussion thread in GitLab.
+					file := parseUnanchoredFile(vcs.FirstLine(n.Body))
+					orig := strings.TrimPrefix(stripped, formatSeverity(vcs.Severity(md.Sev)))
+					out.Inline = append(out.Inline, vcs.PriorInline{
+						Tool:            md.Tool,
+						File:            file,
+						Severity:        md.Sev,
+						StructuralKey:   md.SK,
+						Title:           vcs.FirstLine(strings.TrimSpace(orig)),
+						NormalizedTitle: md.NT,
+						// ExternalID intentionally empty: unanchored notes have no
+						// resolvable discussion thread.
 					})
 					continue
 				}
@@ -530,6 +551,26 @@ func countDiffLines(diff string) (add, del int) {
 		}
 	}
 	return
+}
+
+// parseUnanchoredFile extracts the file path from the first line of an
+// unanchored note body, which has the format "`file:line` (outside diff)" or
+// "`file` (outside diff)". Returns "" if the format doesn't match.
+func parseUnanchoredFile(firstLine string) string {
+	if !strings.HasPrefix(firstLine, "`") {
+		return ""
+	}
+	rest := firstLine[1:]
+	end := strings.IndexByte(rest, '`')
+	if end < 0 {
+		return ""
+	}
+	loc := rest[:end]
+	// Strip optional ":line" suffix.
+	if i := strings.LastIndexByte(loc, ':'); i > 0 {
+		loc = loc[:i]
+	}
+	return loc
 }
 
 // ptr is a generic pointer helper. Mirrors the pattern used in the github

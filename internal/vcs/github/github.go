@@ -326,13 +326,14 @@ func (a *Adapter) ListCadooArtifacts(ctx context.Context, pr *vcs.PullRequest) (
 				}
 				orig := strings.TrimPrefix(stripped, formatSeverity(vcs.Severity(md.Sev)))
 				out.Inline = append(out.Inline, vcs.PriorInline{
-					Tool:          md.Tool,
-					File:          first.Path,
-					Severity:      md.Sev,
-					StructuralKey: md.SK,
-					Title:         vcs.FirstLine(strings.TrimSpace(orig)),
-					ExternalID:    th.ID,
-					Resolved:      th.IsResolved,
+					Tool:            md.Tool,
+					File:            first.Path,
+					Severity:        md.Sev,
+					StructuralKey:   md.SK,
+					Title:           vcs.FirstLine(strings.TrimSpace(orig)),
+					NormalizedTitle: md.NT,
+					ExternalID:      th.ID,
+					Resolved:        th.IsResolved,
 				})
 			}
 			if p.ReviewThreads.PageInfo.HasNextPage {
