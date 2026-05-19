@@ -312,3 +312,41 @@ func TestPostInlineResolvesStalePriors(t *testing.T) {
 		t.Errorf("expected disc-1 resolved (the stale prior), got %q", fv.resolved[0])
 	}
 }
+
+// captureVCS records exactly what bodies were sent over the wire and hands
+// back per-comment external IDs (like the real GitLab adapter).
+type captureVCS struct {
+	idVCS
+	sentBodies []string
+}
+
+func (c *captureVCS) PostInlineComments(_ context.Context, _ *vcs.PullRequest, cs []vcs.InlineComment) ([]vcs.PostedInlineRef, error) {
+	refs := make([]vcs.PostedInlineRef, len(cs))
+	for i, cc := range cs {
+		c.sentBodies = append(c.sentBodies, cc.Body)
+		refs[i] = vcs.PostedInlineRef{Comment: cc, ExternalID: fmt.Sprintf("disc-%d", i+1)}
+	}
+	return refs, nil
+}
+
+func TestPostInlineStampsWireBodyButRecordsPristine(t *testing.T) {
+	ctx := context.Background()
+	cv := &captureVCS{}
+	d := &Dispatcher{Posted: findings.NewMemory("")}
+	pr := &vcs.PullRequest{RepoFullName: "g/p", Number: 1}
+	key := findings.PRKey{Provider: "gitlab", RepoFullName: "g/p", PRNumber: 1}
+	c := vcs.InlineComment{File: "a.go", Body: "Fix the leak.", Severity: vcs.SeverityWarn}
+
+	d.postInline(ctx, cv, pr, key, "review", []vcs.InlineComment{c})
+
+	if len(cv.sentBodies) != 1 {
+		t.Fatalf("sent %d bodies; want 1", len(cv.sentBodies))
+	}
+	if _, _, ok := vcs.ParseInlineMarker(cv.sentBodies[0]); !ok {
+		t.Errorf("wire body missing marker: %q", cv.sentBodies[0])
+	}
+	has, _ := d.Posted.HasFinding(ctx, key, "review", c)
+	if !has {
+		t.Error("pristine comment not recorded / HasFinding=false")
+	}
+}
