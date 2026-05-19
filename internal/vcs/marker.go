@@ -37,9 +37,12 @@ func ParseInlineMarker(body string) (MarkerData, string, bool) {
 	if loc == nil {
 		return MarkerData{}, body, false
 	}
-	m := inlineMarkerRe.FindStringSubmatch(body)
 	stripped := strings.TrimRight(body[:loc[0]], "\n")
-	return MarkerData{Tool: m[1], SK: m[2], Sev: m[3]}, stripped, true
+	return MarkerData{
+		Tool: body[loc[2]:loc[3]],
+		SK:   body[loc[4]:loc[5]],
+		Sev:  body[loc[6]:loc[7]],
+	}, stripped, true
 }
 
 // FirstLine returns the first line of s (no trailing newline).
