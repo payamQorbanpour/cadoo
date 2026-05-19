@@ -221,10 +221,11 @@ func (a *Adapter) PostInlineComments(ctx context.Context, pr *vcs.PullRequest, c
 	if err != nil {
 		return nil, err
 	}
-	// GitHub's review-create API returns the review, not per-comment IDs.
-	// We could re-list review comments here to recover them, but for now we
-	// surface refs with empty IDs — ResolveThread is a no-op on GitHub
-	// until we move to GraphQL resolveReviewThread.
+	// GitHub's review-create API returns the review, not per-comment
+	// IDs, so the refs we surface here carry empty IDs. Thread
+	// resolution does not rely on these: ListCadooArtifacts recovers
+	// review-thread node IDs via GraphQL, and ResolveThread resolves
+	// them through the resolveReviewThread mutation.
 	refs := make([]vcs.PostedInlineRef, len(comments))
 	for i, c := range comments {
 		refs[i] = vcs.PostedInlineRef{Comment: c}
