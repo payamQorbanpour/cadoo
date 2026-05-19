@@ -153,7 +153,7 @@ func joinBody(userText, section, tail string) string {
 		b.WriteString("\n\n")
 	}
 	b.WriteString(prSectionBegin)
-	b.WriteString("\n## " + descriptionAvatar + " Cadoo\n\n")
+	b.WriteString("\n## " + descriptionAvatar + " Cadoo Description\n\n")
 	b.WriteString(section)
 	b.WriteString("\n")
 	b.WriteString(prSectionEnd)

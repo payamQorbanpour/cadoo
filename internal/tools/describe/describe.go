@@ -100,10 +100,8 @@ func (Tool) Run(ctx context.Context, in tools.Input) (*tools.Result, error) {
 		return nil, err
 	}
 	body := buildSection(out, in.Files, true)
-	comment := buildSection(out, in.Files, false)
 	return &tools.Result{
 		EditPRBody: &body,
-		Summary:    comment,
 	}, nil
 }
 
