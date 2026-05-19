@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
@@ -310,5 +311,128 @@ func TestPostInlineResolvesStalePriors(t *testing.T) {
 	}
 	if fv.resolved[0] != "disc-1" {
 		t.Errorf("expected disc-1 resolved (the stale prior), got %q", fv.resolved[0])
+	}
+}
+
+// captureVCS records exactly what bodies were sent over the wire and hands
+// back per-comment external IDs (like the real GitLab adapter).
+type captureVCS struct {
+	idVCS
+	sentBodies []string
+}
+
+func (c *captureVCS) PostInlineComments(_ context.Context, _ *vcs.PullRequest, cs []vcs.InlineComment) ([]vcs.PostedInlineRef, error) {
+	refs := make([]vcs.PostedInlineRef, len(cs))
+	for i, cc := range cs {
+		c.sentBodies = append(c.sentBodies, cc.Body)
+		refs[i] = vcs.PostedInlineRef{Comment: cc, ExternalID: fmt.Sprintf("disc-%d", i+1)}
+	}
+	return refs, nil
+}
+
+func TestPostInlineStampsWireBodyButRecordsPristine(t *testing.T) {
+	ctx := context.Background()
+	cv := &captureVCS{}
+	d := &Dispatcher{Posted: findings.NewMemory("")}
+	pr := &vcs.PullRequest{RepoFullName: "g/p", Number: 1}
+	key := findings.PRKey{Provider: "gitlab", RepoFullName: "g/p", PRNumber: 1}
+	c := vcs.InlineComment{File: "a.go", Body: "Fix the leak.", Severity: vcs.SeverityWarn}
+
+	d.postInline(ctx, cv, pr, key, "review", []vcs.InlineComment{c})
+
+	if len(cv.sentBodies) != 1 {
+		t.Fatalf("sent %d bodies; want 1", len(cv.sentBodies))
+	}
+	if _, _, ok := vcs.ParseInlineMarker(cv.sentBodies[0]); !ok {
+		t.Errorf("wire body missing marker: %q", cv.sentBodies[0])
+	}
+	has, _ := d.Posted.HasFinding(ctx, key, "review", c)
+	if !has {
+		t.Error("pristine comment not recorded / HasFinding=false")
+	}
+}
+
+// scenarioVCS records inline posts and summary create/update calls, and can
+// replay them as a vcs.PriorReview for the second run.
+type scenarioVCS struct {
+	idVCS
+	inline      []vcs.InlineComment
+	summaryID   string
+	summaryBody string
+	updated     bool
+	resolved    []string
+}
+
+func (s *scenarioVCS) PostInlineComments(_ context.Context, _ *vcs.PullRequest, cs []vcs.InlineComment) ([]vcs.PostedInlineRef, error) {
+	refs := make([]vcs.PostedInlineRef, len(cs))
+	for i, cc := range cs {
+		s.inline = append(s.inline, cc)
+		refs[i] = vcs.PostedInlineRef{Comment: cc, ExternalID: fmt.Sprintf("T%d", len(s.inline))}
+	}
+	return refs, nil
+}
+func (s *scenarioVCS) PostSummaryComment(_ context.Context, _ *vcs.PullRequest, body string) (string, error) {
+	s.summaryID, s.summaryBody = "S1", body
+	return s.summaryID, nil
+}
+func (s *scenarioVCS) UpdateSummaryComment(_ context.Context, _ *vcs.PullRequest, id, body string) error {
+	s.updated, s.summaryBody = true, body
+	return nil
+}
+func (s *scenarioVCS) ResolveThread(_ context.Context, _ *vcs.PullRequest, id string) error {
+	s.resolved = append(s.resolved, id)
+	return nil
+}
+func (s *scenarioVCS) replay() vcs.PriorReview {
+	pr := vcs.PriorReview{SummaryCommentID: s.summaryID}
+	for i, c := range s.inline {
+		md, stripped, _ := vcs.ParseInlineMarker(c.Body)
+		pr.Inline = append(pr.Inline, vcs.PriorInline{
+			Tool: md.Tool, File: c.File, Severity: md.Sev,
+			StructuralKey: md.SK, Title: vcs.FirstLine(stripped),
+			ExternalID: fmt.Sprintf("T%d", i+1),
+		})
+	}
+	return pr
+}
+
+func TestCIModeTwoRunIdempotency(t *testing.T) {
+	ctx := context.Background()
+	sv := &scenarioVCS{}
+	pr := &vcs.PullRequest{RepoFullName: "g/p", Number: 1}
+	key := findings.PRKey{Provider: "gitlab", RepoFullName: "g/p", PRNumber: 1}
+
+	c1 := vcs.InlineComment{File: "a.go", Body: "Leak here.", Severity: vcs.SeverityWarn}
+	c2 := vcs.InlineComment{File: "b.go", Body: "Off by one.", Severity: vcs.SeverityWarn}
+
+	// --- Run 1: fresh PR, empty prior store (legacy CI behaviour seed). ---
+	d1 := &Dispatcher{Posted: findings.NewFromPrior(key, vcs.PriorReview{})}
+	d1.postSummary(ctx, sv, pr, key, "review", "## Overview\nfirst pass")
+	d1.postInline(ctx, sv, pr, key, "review", []vcs.InlineComment{c1, c2})
+
+	if len(sv.inline) != 2 || sv.summaryID != "S1" {
+		t.Fatalf("run1: inline=%d summaryID=%q; want 2, S1", len(sv.inline), sv.summaryID)
+	}
+
+	// --- Run 2: c1 persists, c2 fixed (absent), new c3. ---
+	prior := sv.replay()
+	sv.inline = nil // count only NEW posts in run 2
+	c3 := vcs.InlineComment{File: "c.go", Body: "Nil deref.", Severity: vcs.SeverityWarn}
+
+	d2 := &Dispatcher{Posted: findings.NewFromPrior(key, prior)}
+	d2.postSummary(ctx, sv, pr, key, "review", "## Overview\nsecond pass")
+	d2.postInline(ctx, sv, pr, key, "review", []vcs.InlineComment{c1, c3})
+
+	if len(sv.inline) != 1 || sv.inline[0].File != "c.go" {
+		t.Errorf("run2 inline = %+v; want only c.go (c1 deduped)", sv.inline)
+	}
+	if !sv.updated {
+		t.Error("run2: overview was not edited in place (expected UpdateSummaryComment)")
+	}
+	if len(sv.resolved) != 1 || sv.resolved[0] != "T2" {
+		t.Errorf("run2 resolved = %v; want [T2] (the fixed b.go thread)", sv.resolved)
+	}
+	if !strings.Contains(sv.summaryBody, "second pass") {
+		t.Errorf("run2 summaryBody = %q; want it to contain \"second pass\"", sv.summaryBody)
 	}
 }

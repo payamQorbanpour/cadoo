@@ -124,3 +124,29 @@ type Provider interface {
 
 	UpsertCheckRun(ctx context.Context, pr *PullRequest, run CheckRun) error
 }
+
+// PriorReviewReader is an OPTIONAL capability. Adapters that can enumerate
+// Cadoo's own previously-posted artifacts on a PR/MR implement it so that
+// stateless CI-mode (no DB) can rebuild dedup state from the PR itself.
+// The orchestrator type-asserts for it; providers that don't implement it
+// fall back to non-idempotent behaviour.
+type PriorReviewReader interface {
+	ListCadooArtifacts(ctx context.Context, pr *PullRequest) (PriorReview, error)
+}
+
+// PriorReview is a normalized snapshot of Cadoo's prior footprint on a PR.
+type PriorReview struct {
+	SummaryCommentID string // overview comment/note id (found via SummaryWrapperBegin); "" if none
+	Inline           []PriorInline
+}
+
+// PriorInline is one previously-posted Cadoo inline finding.
+type PriorInline struct {
+	Tool          string
+	File          string
+	Severity      string
+	StructuralKey string // parsed from the hidden marker (authoritative)
+	Title         string // first visible line of the original body
+	ExternalID    string // discussion/thread id for ResolveThread; "" if unrecoverable
+	Resolved      bool   // already resolved upstream — don't re-resolve
+}
