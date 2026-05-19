@@ -286,6 +286,9 @@ func (a *Adapter) ListCadooArtifacts(ctx context.Context, pr *vcs.PullRequest) (
 
 	var out vcs.PriorReview
 	var tc, rc string
+	// Per-connection done flags: stop processing a connection once it has no
+	// next page, so an exhausted connection is never re-scanned.
+	var doneC, doneT bool
 	for {
 		var r gqlResp
 		vars := map[string]any{"owner": owner, "name": name, "num": int(pr.Number)}
@@ -299,41 +302,47 @@ func (a *Adapter) ListCadooArtifacts(ctx context.Context, pr *vcs.PullRequest) (
 			return vcs.PriorReview{}, err
 		}
 		p := r.Repository.PullRequest
-		for _, c := range p.Comments.Nodes {
-			if out.SummaryCommentID == "" && strings.Contains(c.Body, vcs.SummaryWrapperBegin) {
-				out.SummaryCommentID = strconv.FormatInt(c.DatabaseID, 10)
+		if !doneC {
+			for _, c := range p.Comments.Nodes {
+				if out.SummaryCommentID == "" && strings.Contains(c.Body, vcs.SummaryWrapperBegin) {
+					out.SummaryCommentID = strconv.FormatInt(c.DatabaseID, 10)
+				}
+			}
+			if p.Comments.PageInfo.HasNextPage {
+				tc = p.Comments.PageInfo.EndCursor
+			} else {
+				doneC = true
 			}
 		}
-		for _, th := range p.ReviewThreads.Nodes {
-			if len(th.Comments.Nodes) == 0 {
-				continue
+		if !doneT {
+			for _, th := range p.ReviewThreads.Nodes {
+				if len(th.Comments.Nodes) == 0 {
+					continue
+				}
+				first := th.Comments.Nodes[0]
+				md, stripped, ok := vcs.ParseInlineMarker(first.Body)
+				if !ok {
+					continue
+				}
+				orig := strings.TrimPrefix(stripped, formatSeverity(vcs.Severity(md.Sev)))
+				out.Inline = append(out.Inline, vcs.PriorInline{
+					Tool:          md.Tool,
+					File:          first.Path,
+					Severity:      md.Sev,
+					StructuralKey: md.SK,
+					Title:         vcs.FirstLine(strings.TrimSpace(orig)),
+					ExternalID:    th.ID,
+					Resolved:      th.IsResolved,
+				})
 			}
-			first := th.Comments.Nodes[0]
-			md, stripped, ok := vcs.ParseInlineMarker(first.Body)
-			if !ok {
-				continue
+			if p.ReviewThreads.PageInfo.HasNextPage {
+				rc = p.ReviewThreads.PageInfo.EndCursor
+			} else {
+				doneT = true
 			}
-			orig := strings.TrimPrefix(stripped, formatSeverity(vcs.Severity(md.Sev)))
-			out.Inline = append(out.Inline, vcs.PriorInline{
-				Tool:          md.Tool,
-				File:          first.Path,
-				Severity:      md.Sev,
-				StructuralKey: md.SK,
-				Title:         vcs.FirstLine(strings.TrimSpace(orig)),
-				ExternalID:    th.ID,
-				Resolved:      th.IsResolved,
-			})
 		}
-		moreC := p.Comments.PageInfo.HasNextPage
-		moreT := p.ReviewThreads.PageInfo.HasNextPage
-		if !moreC && !moreT {
+		if doneC && doneT {
 			break
-		}
-		if moreC {
-			tc = p.Comments.PageInfo.EndCursor
-		}
-		if moreT {
-			rc = p.ReviewThreads.PageInfo.EndCursor
 		}
 	}
 	return out, nil
