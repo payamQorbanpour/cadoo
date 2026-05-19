@@ -57,6 +57,16 @@ func (Tool) Name() string { return "improve" }
 
 // Run implements tools.Tool.
 func (Tool) Run(ctx context.Context, in tools.Input) (*tools.Result, error) {
+	// Limit PriorFindings to improve's own history. Describe/review findings
+	// from the same CI run would inflate the prompt past the context limit on
+	// large PRs without adding dedup value for this tool.
+	own := make([]tools.PriorFinding, 0, len(in.PriorFindings))
+	for _, pf := range in.PriorFindings {
+		if pf.Tool == "improve" {
+			own = append(own, pf)
+		}
+	}
+	in.PriorFindings = own
 	user := tools.BuildDiffPrompt(in)
 	var out Output
 	sys := tools.EffectivePrompt("improve", systemPrompt, in.Config)

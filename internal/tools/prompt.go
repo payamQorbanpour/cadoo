@@ -5,6 +5,11 @@ import (
 	"strings"
 )
 
+// maxPriorFindings caps the number of prior-finding lines appended to any
+// tool prompt. Each entry is ~60-80 chars (~20 tokens); 100 entries ≈ 2K
+// tokens — enough for dedup context without risking context-window overflow.
+const maxPriorFindings = 100
+
 // BuildDiffPrompt formats the PR header + diff for the user-message half of
 // a tool's prompt. Most tools use this verbatim; /ask appends a Question
 // section after.
@@ -91,9 +96,13 @@ func BuildDiffPrompt(in Input) string {
 		}
 	}
 	if len(in.PriorFindings) > 0 {
+		pf := in.PriorFindings
+		if len(pf) > maxPriorFindings {
+			pf = pf[:maxPriorFindings]
+		}
 		b.WriteString("## Already posted on this PR — DO NOT restate or rephrase\n\n")
 		b.WriteString("Cadoo (you, in prior runs) has already left these inline comments. Skip any finding that is the same issue at the same location, even if you'd word it differently. Only surface a finding here if it is genuinely new (different bug, different location, or substantively different concern).\n\n")
-		for _, p := range in.PriorFindings {
+		for _, p := range pf {
 			loc := p.File
 			if p.LineStart > 0 {
 				if p.LineEnd > 0 && p.LineEnd != p.LineStart {
