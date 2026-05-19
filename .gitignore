@@ -33,5 +33,4 @@ internal/db/sqlc_gen/
 
 # Claude
 .claude
-CLAUDE.md
 .serena
