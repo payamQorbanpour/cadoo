@@ -33,3 +33,16 @@ func TestFirstLine(t *testing.T) {
 		t.Errorf("FirstLine = %q; want %q", got, "only")
 	}
 }
+
+func TestPriorReviewShape(t *testing.T) {
+	pr := PriorReview{
+		SummaryCommentID: "42",
+		Inline: []PriorInline{{
+			Tool: "review", File: "a.go", Severity: "warn",
+			StructuralKey: "abc", Title: "boom", ExternalID: "d1", Resolved: false,
+		}},
+	}
+	if pr.Inline[0].StructuralKey != "abc" || pr.SummaryCommentID != "42" {
+		t.Fatalf("unexpected PriorReview round-trip: %+v", pr)
+	}
+}
