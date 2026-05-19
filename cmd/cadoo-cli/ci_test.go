@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"testing"
 
+	"github.com/payamqorbanpour/cadoo/internal/findings"
 	"github.com/payamqorbanpour/cadoo/internal/vcs"
 )
 
@@ -139,6 +141,40 @@ func TestParseTargetURL(t *testing.T) {
 				t.Errorf("Number = %d, want %d", got.Number, tc.wantNumber)
 			}
 		})
+	}
+}
+
+type fakePriorReader struct{ snap vcs.PriorReview }
+
+func (f fakePriorReader) ListCadooArtifacts(_ context.Context, _ *vcs.PullRequest) (vcs.PriorReview, error) {
+	return f.snap, nil
+}
+
+func TestPriorStoreSeedsFromReader(t *testing.T) {
+	ctx := context.Background()
+	key := findings.PRKey{Provider: "gitlab", RepoFullName: "g/p", PRNumber: 4}
+	c := vcs.InlineComment{File: "a.go", Body: "Fix the leak.", Severity: vcs.SeverityWarn}
+	sk := findings.StructuralKey("review", c)
+
+	r := fakePriorReader{snap: vcs.PriorReview{
+		SummaryCommentID: "12",
+		Inline: []vcs.PriorInline{{
+			Tool: "review", File: "a.go", Severity: "warn",
+			StructuralKey: sk, Title: "Fix the leak.", ExternalID: "T1",
+		}},
+	}}
+
+	st := priorStore(ctx, r, "g/p", 4, vcs.KindGitLab)
+	if st == nil || !st.Enabled() {
+		t.Fatal("priorStore returned nil/disabled store")
+	}
+	has, _ := st.HasFinding(ctx, key, "review", c)
+	if !has {
+		t.Error("seeded finding not found via HasFinding")
+	}
+	id, _ := st.SummaryID(ctx, key, findings.WrapperToolKey)
+	if id != "12" {
+		t.Errorf("SummaryID = %q; want 12", id)
 	}
 }
 
