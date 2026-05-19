@@ -21,6 +21,14 @@ func StampInline(tool string, c vcs.InlineComment) string {
 // to postSummary / postInline / resolveStalePriors.
 func NewFromPrior(key PRKey, pr vcs.PriorReview) *Store {
 	m := newMemoryStore("") // empty path => load()/persist() are no-ops
+	// Seeded records intentionally carry no Fingerprint: it can't be
+	// reconstructed from read-back (the marker only encodes tool/sk/sev,
+	// not line numbers or the full body). Stateless dedup keys on
+	// StructuralKey via Store.has(), and postInline filters a persisting
+	// finding out of the delta before posting, so RecordFinding (whose
+	// memoryStore.record idempotency guard compares Fingerprint) is never
+	// invoked for an already-seeded finding. The empty Fingerprint is
+	// therefore moot for seeded records by design.
 	recs := make([]findingRec, 0, len(pr.Inline))
 	for _, pi := range pr.Inline {
 		recs = append(recs, findingRec{
