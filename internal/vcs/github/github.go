@@ -39,6 +39,11 @@ type Config struct {
 type Adapter struct {
 	cfg    Config
 	client *gogithub.Client
+
+	// GraphQL seams. Default to the authenticated go-github http client and
+	// the endpoint derived from its REST base URL; overridable in tests.
+	gqlClient   *http.Client
+	gqlEndpoint string
 }
 
 // New returns a ready Adapter authenticated either by bearer token or as a
@@ -74,7 +79,10 @@ func New(cfg Config) (*Adapter, error) {
 	if cfg.Token != "" {
 		client = client.WithAuthToken(cfg.Token)
 	}
-	return &Adapter{cfg: cfg, client: client}, nil
+	ad := &Adapter{cfg: cfg, client: client}
+	ad.gqlClient = client.Client()
+	ad.gqlEndpoint = graphqlEndpoint(client.BaseURL)
+	return ad, nil
 }
 
 // Kind reports github.com vs GHES.
@@ -224,12 +232,122 @@ func (a *Adapter) PostInlineComments(ctx context.Context, pr *vcs.PullRequest, c
 	return refs, nil
 }
 
-// ResolveThread is a no-op on GitHub today: the REST review API doesn't
-// expose per-comment resolution and we don't yet talk to the GraphQL
-// resolveReviewThread mutation. Returning nil keeps the caller's
-// auto-resolve loop happy while GitLab does the real work.
-func (a *Adapter) ResolveThread(_ context.Context, _ *vcs.PullRequest, _ string) error {
-	return nil
+// ListCadooArtifacts implements vcs.PriorReviewReader using a single
+// paginated GraphQL query over the PR's issue comments (overview, matched
+// by SummaryWrapperBegin) and review threads (inline findings, matched by
+// the hidden marker on the first comment).
+func (a *Adapter) ListCadooArtifacts(ctx context.Context, pr *vcs.PullRequest) (vcs.PriorReview, error) {
+	owner, name, err := splitRepo(pr.RepoFullName)
+	if err != nil {
+		return vcs.PriorReview{}, err
+	}
+	const q = `query($owner:String!,$name:String!,$num:Int!,$tc:String,$rc:String){
+	  repository(owner:$owner,name:$name){ pullRequest(number:$num){
+	    comments(first:100,after:$tc){ nodes{ databaseId body }
+	      pageInfo{ hasNextPage endCursor } }
+	    reviewThreads(first:100,after:$rc){ nodes{ id isResolved
+	      comments(first:1){ nodes{ path body } } }
+	      pageInfo{ hasNextPage endCursor } }
+	  }}}`
+
+	type gqlResp struct {
+		Repository struct {
+			PullRequest struct {
+				Comments struct {
+					Nodes []struct {
+						DatabaseID int64  `json:"databaseId"`
+						Body       string `json:"body"`
+					} `json:"nodes"`
+					PageInfo struct {
+						HasNextPage bool   `json:"hasNextPage"`
+						EndCursor   string `json:"endCursor"`
+					} `json:"pageInfo"`
+				} `json:"comments"`
+				ReviewThreads struct {
+					Nodes []struct {
+						ID         string `json:"id"`
+						IsResolved bool   `json:"isResolved"`
+						Comments   struct {
+							Nodes []struct {
+								Path string `json:"path"`
+								Body string `json:"body"`
+							} `json:"nodes"`
+						} `json:"comments"`
+					} `json:"nodes"`
+					PageInfo struct {
+						HasNextPage bool   `json:"hasNextPage"`
+						EndCursor   string `json:"endCursor"`
+					} `json:"pageInfo"`
+				} `json:"reviewThreads"`
+			} `json:"pullRequest"`
+		} `json:"repository"`
+	}
+
+	var out vcs.PriorReview
+	var tc, rc string
+	for {
+		var r gqlResp
+		vars := map[string]any{"owner": owner, "name": name, "num": int(pr.Number)}
+		if tc != "" {
+			vars["tc"] = tc
+		}
+		if rc != "" {
+			vars["rc"] = rc
+		}
+		if err := doGraphQL(ctx, a.gqlClient, a.gqlEndpoint, q, vars, &r); err != nil {
+			return vcs.PriorReview{}, err
+		}
+		p := r.Repository.PullRequest
+		for _, c := range p.Comments.Nodes {
+			if out.SummaryCommentID == "" && strings.Contains(c.Body, vcs.SummaryWrapperBegin) {
+				out.SummaryCommentID = strconv.FormatInt(c.DatabaseID, 10)
+			}
+		}
+		for _, th := range p.ReviewThreads.Nodes {
+			if len(th.Comments.Nodes) == 0 {
+				continue
+			}
+			first := th.Comments.Nodes[0]
+			md, stripped, ok := vcs.ParseInlineMarker(first.Body)
+			if !ok {
+				continue
+			}
+			orig := strings.TrimPrefix(stripped, formatSeverity(vcs.Severity(md.Sev)))
+			out.Inline = append(out.Inline, vcs.PriorInline{
+				Tool:          md.Tool,
+				File:          first.Path,
+				Severity:      md.Sev,
+				StructuralKey: md.SK,
+				Title:         vcs.FirstLine(strings.TrimSpace(orig)),
+				ExternalID:    th.ID,
+				Resolved:      th.IsResolved,
+			})
+		}
+		moreC := p.Comments.PageInfo.HasNextPage
+		moreT := p.ReviewThreads.PageInfo.HasNextPage
+		if !moreC && !moreT {
+			break
+		}
+		if moreC {
+			tc = p.Comments.PageInfo.EndCursor
+		}
+		if moreT {
+			rc = p.ReviewThreads.PageInfo.EndCursor
+		}
+	}
+	return out, nil
+}
+
+// ResolveThread resolves a GitHub review thread via the GraphQL
+// resolveReviewThread mutation. threadID is the GraphQL node ID captured by
+// ListCadooArtifacts. Empty id is a no-op (e.g. unrecoverable thread).
+func (a *Adapter) ResolveThread(ctx context.Context, _ *vcs.PullRequest, threadID string) error {
+	if threadID == "" {
+		return nil
+	}
+	const m = `mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{id}}}`
+	return doGraphQL(ctx, a.gqlClient, a.gqlEndpoint, m,
+		map[string]any{"id": threadID}, nil)
 }
 
 // FetchArchive returns a gzipped tarball of the repo at ref. Used by the
