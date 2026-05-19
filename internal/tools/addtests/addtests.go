@@ -51,7 +51,7 @@ func (Tool) Name() string { return "add_tests" }
 
 // Run implements tools.Tool.
 func (Tool) Run(ctx context.Context, in tools.Input) (*tools.Result, error) {
-	user := tools.BuildDiffPrompt(in)
+	user := tools.BuildDiffPrompt(in, tools.PromptOptions{})
 	var out Output
 	sys := tools.EffectivePrompt("add_tests", systemPrompt, in.Config)
 	if err := tools.CallJSON(ctx, in.LLM, in.Model, sys, user, &out); err != nil {

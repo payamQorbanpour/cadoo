@@ -3,6 +3,7 @@ package tools
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
 
 // maxPriorFindings caps the number of prior-finding lines appended to any
@@ -10,14 +11,27 @@ import (
 // tokens — enough for dedup context without risking context-window overflow.
 const maxPriorFindings = 100
 
+// PromptOptions controls which optional sections BuildDiffPrompt includes.
+// The zero value includes all sections (backward-compatible default).
+type PromptOptions struct {
+	SkipTrackerIssues  bool // omit the ## Linked tracker issues section
+	SkipSlopSignal     bool // omit the ## Pre-review signal section
+	SkipStaticAnalysis bool // omit the ## Static analysis findings section
+	MaxPRBodyRunes     int  // truncate PR description body; 0 = unlimited
+}
+
 // BuildDiffPrompt formats the PR header + diff for the user-message half of
 // a tool's prompt. Most tools use this verbatim; /ask appends a Question
 // section after.
-func BuildDiffPrompt(in Input) string {
+func BuildDiffPrompt(in Input, opts PromptOptions) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Pull Request\n\n**%s** by %s\n\n", in.PR.Title, in.PR.Author)
 	if in.PR.Body != "" {
-		fmt.Fprintf(&b, "## Description\n\n%s\n\n", in.PR.Body)
+		body := in.PR.Body
+		if opts.MaxPRBodyRunes > 0 && utf8.RuneCountInString(body) > opts.MaxPRBodyRunes {
+			body = string([]rune(body)[:opts.MaxPRBodyRunes]) + "…"
+		}
+		fmt.Fprintf(&b, "## Description\n\n%s\n\n", body)
 	}
 	if len(in.Config.Conventions) > 0 {
 		b.WriteString("## Team conventions (treat as authoritative; flag any violation)\n\n")
@@ -50,7 +64,7 @@ func BuildDiffPrompt(in Input) string {
 		}
 		b.WriteString("\n")
 	}
-	if len(in.Issues) > 0 {
+	if !opts.SkipTrackerIssues && len(in.Issues) > 0 {
 		b.WriteString("## Linked tracker issues (validate the PR addresses these)\n\n")
 		for _, iss := range in.Issues {
 			fmt.Fprintf(&b, "### %s — %s (%s, status: %s)\n", iss.Key, iss.Title, iss.Tracker, iss.Status)
@@ -66,14 +80,14 @@ func BuildDiffPrompt(in Input) string {
 			b.WriteString("\n")
 		}
 	}
-	if in.Slop != nil && in.Slop.IsSlop {
+	if !opts.SkipSlopSignal && in.Slop != nil && in.Slop.IsSlop {
 		fmt.Fprintf(&b, "## Pre-review signal: this PR scored %.2f for low-quality / AI-slop\n\n", in.Slop.Score)
 		for _, r := range in.Slop.Reasons {
 			fmt.Fprintf(&b, "- %s\n", r)
 		}
 		b.WriteString("\n")
 	}
-	if len(in.Analysis) > 0 {
+	if !opts.SkipStaticAnalysis && len(in.Analysis) > 0 {
 		b.WriteString("## Static analysis findings (pre-narrowed; reason about real impact)\n\n")
 		for _, f := range in.Analysis {
 			fmt.Fprintf(&b, "- %s [%s] %s:%d — %s\n",
@@ -125,8 +139,12 @@ func BuildDiffPrompt(in Input) string {
 }
 
 func truncateText(s string, n int) string {
-	if len(s) <= n {
+	if len(s) <= n { // fast path: ASCII-length check is fine as lower bound
 		return s
 	}
-	return s[:n] + "…"
+	runes := []rune(s)
+	if len(runes) <= n {
+		return s
+	}
+	return string(runes[:n]) + "…"
 }

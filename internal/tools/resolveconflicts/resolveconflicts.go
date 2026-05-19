@@ -60,7 +60,7 @@ func (Tool) Run(ctx context.Context, in tools.Input) (*tools.Result, error) {
 			Summary: "## Cadoo `/resolve_conflicts`\n\nNo merge-conflict markers found in this PR's diff.",
 		}, nil
 	}
-	user := tools.BuildDiffPrompt(in)
+	user := tools.BuildDiffPrompt(in, tools.PromptOptions{})
 	var out Output
 	sys := tools.EffectivePrompt("resolve_conflicts", systemPrompt, in.Config)
 	if err := tools.CallJSON(ctx, in.LLM, in.Model, sys, user, &out); err != nil {

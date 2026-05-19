@@ -134,7 +134,7 @@ Apply ONLY to files matching: %s
 
 ## Diff
 
-%s`, c.Name, scope, c.Prompt, tools.BuildDiffPrompt(in))
+%s`, c.Name, scope, c.Prompt, tools.BuildDiffPrompt(in, tools.PromptOptions{}))
 
 	var out checkOutput
 	sys := tools.EffectivePrompt("check", systemPrompt, in.Config)

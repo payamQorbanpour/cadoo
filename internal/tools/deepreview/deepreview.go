@@ -86,7 +86,7 @@ func (Tool) Run(ctx context.Context, in tools.Input) (*tools.Result, error) {
 		Temperature: 0.2,
 	}
 
-	user := tools.BuildDiffPrompt(in)
+	user := tools.BuildDiffPrompt(in, tools.PromptOptions{})
 	res, err := loop.Run(ctx, user)
 	if err != nil {
 		return nil, err

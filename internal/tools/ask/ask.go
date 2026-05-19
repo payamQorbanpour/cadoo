@@ -29,7 +29,7 @@ func (Tool) Run(ctx context.Context, in tools.Input) (*tools.Result, error) {
 			Summary: "Cadoo `/ask` requires a question. Example: `/ask why was this approach chosen?`",
 		}, nil
 	}
-	user := tools.BuildDiffPrompt(in) + "\n\n## Question\n\n" + question
+	user := tools.BuildDiffPrompt(in, tools.PromptOptions{}) + "\n\n## Question\n\n" + question
 	sys := tools.EffectivePrompt("ask", systemPrompt, in.Config)
 	answer, err := tools.CallText(ctx, in.LLM, in.Model, sys, user)
 	if err != nil {

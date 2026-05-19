@@ -93,7 +93,7 @@ func (Tool) Name() string { return "describe" }
 // place on subsequent dispatches via the marker pair the orchestrator
 // recognises).
 func (Tool) Run(ctx context.Context, in tools.Input) (*tools.Result, error) {
-	user := tools.BuildDiffPrompt(in)
+	user := tools.BuildDiffPrompt(in, tools.PromptOptions{SkipStaticAnalysis: true})
 	var out Output
 	sys := tools.EffectivePrompt("describe", systemPrompt, in.Config)
 	if err := tools.CallJSON(ctx, in.LLM, in.Model, sys, user, &out); err != nil {

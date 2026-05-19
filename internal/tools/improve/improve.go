@@ -67,7 +67,7 @@ func (Tool) Run(ctx context.Context, in tools.Input) (*tools.Result, error) {
 		}
 	}
 	in.PriorFindings = own
-	user := tools.BuildDiffPrompt(in)
+	user := tools.BuildDiffPrompt(in, tools.PromptOptions{SkipTrackerIssues: true, SkipSlopSignal: true, MaxPRBodyRunes: 800})
 	var out Output
 	sys := tools.EffectivePrompt("improve", systemPrompt, in.Config)
 	if err := tools.CallJSON(ctx, in.LLM, in.Model, sys, user, &out); err != nil {

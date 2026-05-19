@@ -99,7 +99,7 @@ func (Tool) Name() string { return "review" }
 
 // Run implements tools.Tool.
 func (Tool) Run(ctx context.Context, in tools.Input) (*tools.Result, error) {
-	user := tools.BuildDiffPrompt(in)
+	user := tools.BuildDiffPrompt(in, tools.PromptOptions{})
 	sys := tools.EffectivePrompt("review", DefaultPrompt, in.Config)
 	var out Output
 	if err := tools.CallJSON(ctx, in.LLM, in.Model, sys, user, &out); err != nil {

@@ -64,7 +64,7 @@ func (Tool) Run(ctx context.Context, in tools.Input) (*tools.Result, error) {
 			Summary: "## Cadoo `/plan`\n\nProvide a PRD as `/plan <description>` or in the PR body.",
 		}, nil
 	}
-	user := fmt.Sprintf("# PRD\n\n%s\n\n# Existing diff context\n\n%s", prd, tools.BuildDiffPrompt(in))
+	user := fmt.Sprintf("# PRD\n\n%s\n\n# Existing diff context\n\n%s", prd, tools.BuildDiffPrompt(in, tools.PromptOptions{}))
 	var out Output
 	sys := tools.EffectivePrompt("plan", systemPrompt, in.Config)
 	if err := tools.CallJSON(ctx, in.LLM, in.Model, sys, user, &out); err != nil {
