@@ -31,7 +31,8 @@ Rules:
 - Only suggest changes that touch lines present in the diff.
 - "code" must be a complete replacement for the [line_start, line_end] range.
 - "rationale" is the one-line action a reviewer would write in a thread: terse, imperative, no explanation paragraphs.
-- Prefer 2-5 high-leverage suggestions over many trivial ones.
+- Return AT MOST 5 suggestions. Rank all candidates by impact; drop everything outside the top 5.
+- Only suggest a change if it materially improves correctness, performance, security, or API clarity — not cosmetic rewrites, renames, or adding comments.
 - If you can't propose a concrete improvement, return suggestions: [].`
 
 // Suggestion is one proposed code change.
