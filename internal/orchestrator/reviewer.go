@@ -125,6 +125,11 @@ type Dispatcher struct {
 
 	MaxTokens     int
 	PerFileTokens int
+
+	// summaryMu serializes the read-SummaryID → write-comment → store-ID
+	// sequence inside postSummary. Without this, concurrent tool goroutines
+	// (CI parallel dispatch) race to create duplicate consolidated comments.
+	summaryMu sync.Mutex
 }
 
 // Handle is the jobs.Handler entry point.
@@ -345,6 +350,10 @@ func (d *Dispatcher) postSummary(ctx context.Context, provider vcs.Provider, pr 
 	if err := d.Posted.PutSection(ctx, key, tool, body); err != nil {
 		slog.Debug("put section", "err", err)
 	}
+
+	d.summaryMu.Lock()
+	defer d.summaryMu.Unlock()
+
 	sections, err := d.Posted.AllSections(ctx, key)
 	if err != nil {
 		slog.Debug("all sections", "err", err)

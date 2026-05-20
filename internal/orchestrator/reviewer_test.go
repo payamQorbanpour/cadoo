@@ -356,11 +356,13 @@ func TestPostInlineStampsWireBodyButRecordsPristine(t *testing.T) {
 // replay them as a vcs.PriorReview for the second run.
 type scenarioVCS struct {
 	idVCS
-	inline      []vcs.InlineComment
-	summaryID   string
-	summaryBody string
-	updated     bool
-	resolved    []string
+	inline          []vcs.InlineComment
+	summaryID       string
+	summaryBody     string
+	updated         bool
+	resolved        []string
+	postSummaryFn   func(ctx context.Context, pr *vcs.PullRequest, body string) (string, error)
+	updateSummaryFn func(ctx context.Context, pr *vcs.PullRequest, id, body string) error
 }
 
 func (s *scenarioVCS) PostInlineComments(_ context.Context, _ *vcs.PullRequest, cs []vcs.InlineComment) ([]vcs.PostedInlineRef, error) {
@@ -371,11 +373,17 @@ func (s *scenarioVCS) PostInlineComments(_ context.Context, _ *vcs.PullRequest, 
 	}
 	return refs, nil
 }
-func (s *scenarioVCS) PostSummaryComment(_ context.Context, _ *vcs.PullRequest, body string) (string, error) {
+func (s *scenarioVCS) PostSummaryComment(ctx context.Context, pr *vcs.PullRequest, body string) (string, error) {
+	if s.postSummaryFn != nil {
+		return s.postSummaryFn(ctx, pr, body)
+	}
 	s.summaryID, s.summaryBody = "S1", body
 	return s.summaryID, nil
 }
-func (s *scenarioVCS) UpdateSummaryComment(_ context.Context, _ *vcs.PullRequest, id, body string) error {
+func (s *scenarioVCS) UpdateSummaryComment(ctx context.Context, pr *vcs.PullRequest, id, body string) error {
+	if s.updateSummaryFn != nil {
+		return s.updateSummaryFn(ctx, pr, id, body)
+	}
 	s.updated, s.summaryBody = true, body
 	return nil
 }
@@ -480,4 +488,53 @@ func TestCIModeSuppressesRephrasedImproveOnPush2(t *testing.T) {
 	if len(sv.inline) != 0 {
 		t.Errorf("push2: rephrased improve suggestion was not deduped; got %d new posts (expected 0)", len(sv.inline))
 	}
+}
+
+// TestPostSummaryConcurrentNoDuplicates verifies that concurrent postSummary
+// calls for the same PR result in exactly one PostSummaryComment call, even
+// when multiple tool goroutines race to see an empty SummaryID.
+func TestPostSummaryConcurrentNoDuplicates(t *testing.T) {
+	var (
+		mu          sync.Mutex
+		createCalls int
+		updateCalls int
+		commentBody string
+	)
+
+	sv := &scenarioVCS{
+		postSummaryFn: func(ctx context.Context, pr *vcs.PullRequest, body string) (string, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			createCalls++
+			commentBody = body
+			return fmt.Sprintf("comment-%d", createCalls), nil
+		},
+		updateSummaryFn: func(ctx context.Context, pr *vcs.PullRequest, id, body string) error {
+			mu.Lock()
+			defer mu.Unlock()
+			updateCalls++
+			commentBody = body
+			return nil
+		},
+	}
+
+	pr := &vcs.PullRequest{Provider: vcs.KindGitLab, RepoFullName: "org/repo", Number: 1}
+	key := findings.PRKey{Provider: "gitlab", RepoFullName: "org/repo", PRNumber: 1}
+	d := &Dispatcher{Posted: findings.NewMemory("")}
+
+	var wg sync.WaitGroup
+	for _, tool := range []string{"describe", "review", "improve"} {
+		wg.Go(func() {
+			d.postSummary(context.Background(), sv, pr, key, tool, "## "+tool+" section")
+		})
+	}
+	wg.Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if createCalls != 1 {
+		t.Errorf("expected exactly 1 PostSummaryComment call, got %d", createCalls)
+	}
+	_ = updateCalls // 0, 1, or 2 are all acceptable depending on scheduling
+	_ = commentBody
 }
