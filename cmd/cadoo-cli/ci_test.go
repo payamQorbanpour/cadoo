@@ -2,7 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
+	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/payamqorbanpour/cadoo/internal/findings"
 	"github.com/payamqorbanpour/cadoo/internal/vcs"
@@ -175,6 +180,52 @@ func TestPriorStoreSeedsFromReader(t *testing.T) {
 	id, _ := st.SummaryID(ctx, key, findings.WrapperToolKey)
 	if id != "12" {
 		t.Errorf("SummaryID = %q; want 12", id)
+	}
+}
+
+func TestCIKeepGoingOnToolFailure(t *testing.T) {
+	// Verify that when one tool fails, the others still run and
+	// firstErr is non-nil at the end.
+	var (
+		mu  sync.Mutex
+		ran []string
+	)
+	runFn := func(name string) error {
+		time.Sleep(10 * time.Millisecond) // simulate LLM latency
+		mu.Lock()
+		ran = append(ran, name)
+		mu.Unlock()
+		if name == "review" {
+			return fmt.Errorf("review: forced failure")
+		}
+		return nil
+	}
+
+	toolList := []string{"describe", "review", "improve"}
+	var (
+		firstErr   error
+		firstErrMu sync.Mutex
+	)
+	g, _ := errgroup.WithContext(context.Background())
+	for _, name := range toolList {
+		g.Go(func() error {
+			if err := runFn(name); err != nil {
+				firstErrMu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				firstErrMu.Unlock()
+			}
+			return nil // keep-going: never cancel siblings
+		})
+	}
+	_ = g.Wait()
+
+	if firstErr == nil {
+		t.Fatal("expected firstErr to be set")
+	}
+	if len(ran) != 3 {
+		t.Errorf("expected all 3 tools to run; got %v", ran)
 	}
 }
 

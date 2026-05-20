@@ -3,7 +3,7 @@
 // pull_request. Reads the provider-specific token env (GITLAB_TOKEN /
 // GITHUB_TOKEN) and $LLM_GATEWAY_* from the environment, parses the PR/MR
 // URL, builds a stateless Dispatcher (no KB / learnings / audit / sandbox),
-// and dispatches the requested tools sequentially.
+// and dispatches the requested tools concurrently (one goroutine per tool).
 package main
 
 import (
@@ -16,6 +16,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/payamqorbanpour/cadoo/internal/config"
 	"github.com/payamqorbanpour/cadoo/internal/findings"
@@ -207,27 +210,33 @@ func ciCmd(args []string) {
 		sep = "!"
 	}
 
-	var firstErr error
+	var (
+		firstErr   error
+		firstErrMu sync.Mutex
+	)
+	g, gctx := errgroup.WithContext(ctx)
 	for _, name := range toolList {
-		fmt.Fprintf(os.Stderr, "ci: dispatching %s on %s%s%d\n", name, target.ProjectPath, sep, target.Number)
-		job := orchestrator.ToolJob{
-			Provider:     target.Provider,
-			Tool:         name,
-			RepoFullName: target.ProjectPath,
-			PRNumber:     target.Number,
-			Trigger:      "ci",
-		}
-		if err := d.Run(ctx, job); err != nil {
-			fmt.Fprintf(os.Stderr, "ci: %s failed: %v\n", name, err)
-			if firstErr == nil {
-				firstErr = err
+		g.Go(func() error {
+			fmt.Fprintf(os.Stderr, "ci: dispatching %s on %s%s%d\n", name, target.ProjectPath, sep, target.Number)
+			job := orchestrator.ToolJob{
+				Provider:     target.Provider,
+				Tool:         name,
+				RepoFullName: target.ProjectPath,
+				PRNumber:     target.Number,
+				Trigger:      "ci",
 			}
-			// Keep going — scripts run describe→review→improve even if one
-			// stage errors. The pipeline can decide via allow_failure: true
-			// whether to fail the build.
-			continue
-		}
+			if err := d.Run(gctx, job); err != nil {
+				fmt.Fprintf(os.Stderr, "ci: %s failed: %v\n", name, err)
+				firstErrMu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				firstErrMu.Unlock()
+			}
+			return nil // never cancel siblings on single-tool failure
+		})
 	}
+	_ = g.Wait()
 	if firstErr != nil {
 		os.Exit(1)
 	}
