@@ -25,7 +25,7 @@ func TestReviewToolBuildsExpectedResult(t *testing.T) {
 	}
 	in := tools.Input{
 		PR:     &vcs.PullRequest{Title: "x", Author: "a"},
-		Packed: contextengine.Compressed{Files: []vcs.FileChange{{Path: "x.go", Patch: "d"}}},
+		Packed: contextengine.Compressed{Files: []vcs.FileChange{{Path: "x.go", Patch: "@@ -0,0 +1,2 @@\n+a\n+b"}}},
 		Config: config.Default(),
 		LLM: &fakeLLM{body: `{"summary":"ok","findings":[
 			{"file":"x.go","line_start":1,"line_end":1,"severity":"warn","title":"t","body":"b"},
@@ -48,12 +48,42 @@ func TestReviewToolBuildsExpectedResult(t *testing.T) {
 	}
 }
 
+func TestReviewToolDropsOffDiffFindings(t *testing.T) {
+	// Patch adds only new-file line 5. The model returns one finding on that
+	// line (in scope), one on line 99 (a context/unchanged line — out of
+	// scope), and one file-level finding (line 0, always allowed). Only the
+	// in-scope and file-level findings should survive the hard diff-anchor
+	// filter.
+	in := tools.Input{
+		PR:     &vcs.PullRequest{},
+		Packed: contextengine.Compressed{Files: []vcs.FileChange{{Path: "x.go", Patch: "@@ -4,0 +5,1 @@\n+added"}}},
+		Config: config.Default(),
+		LLM: &fakeLLM{body: `{"summary":"s","findings":[
+			{"file":"x.go","line_start":5,"severity":"warn","title":"in","body":"kept"},
+			{"file":"x.go","line_start":99,"severity":"warn","title":"off","body":"dropped"},
+			{"file":"x.go","line_start":0,"severity":"warn","title":"file","body":"kept"}
+		]}`},
+	}
+	res, err := Tool{}.Run(context.Background(), in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.InlineComments) != 2 {
+		t.Fatalf("expected 2 inlines (in-scope + file-level), got %d", len(res.InlineComments))
+	}
+	for _, c := range res.InlineComments {
+		if c.LineStart == 99 {
+			t.Errorf("off-diff finding on line 99 should have been dropped")
+		}
+	}
+}
+
 func TestReviewToolFiltersBelowThreshold(t *testing.T) {
 	cfg := config.Default()
 	cfg.Review.SeverityThreshold = "block"
 	in := tools.Input{
 		PR:     &vcs.PullRequest{},
-		Packed: contextengine.Compressed{},
+		Packed: contextengine.Compressed{Files: []vcs.FileChange{{Path: "a", Patch: "@@ -0,0 +1,2 @@\n+x\n+y"}}},
 		Config: cfg,
 		LLM: &fakeLLM{body: `{"summary":"","findings":[
 			{"file":"a","line_start":1,"severity":"warn","title":"t","body":"b"},
@@ -121,7 +151,7 @@ func TestReviewToolNitOnlyStillSuppressed(t *testing.T) {
 	cfg.Review.SeverityThreshold = "nit" // let nits through convertFindings
 	in := tools.Input{
 		PR:     &vcs.PullRequest{},
-		Packed: contextengine.Compressed{},
+		Packed: contextengine.Compressed{Files: []vcs.FileChange{{Path: "a", Patch: "@@ -0,0 +1,1 @@\n+x"}}},
 		Config: cfg,
 		LLM: &fakeLLM{body: `{"summary":"nits","findings":[
 			{"file":"a","line_start":1,"severity":"nit","title":"t","body":"b"}
