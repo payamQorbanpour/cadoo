@@ -78,5 +78,6 @@ Cadoo is multi-tenant from the schema up — every table carries `org_id`. Self-
 
 - Sample output and feature matrix: `README.md`.
 - Pre-merge gate setup: `docs/PRE_MERGE_GATES.md`.
+- Cutting a release (tag + push → GoReleaser + image publish): `docs/RELEASING.md`.
 - Example per-repo config (every supported key): `.cadoo.yaml.example`.
 - CI-mode runners: `deploy/github/cadoo-review.yml` and `deploy/gitlab/.gitlab-ci.cadoo.yml`.
