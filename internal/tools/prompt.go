@@ -135,6 +135,7 @@ func BuildDiffPrompt(in Input, opts PromptOptions) string {
 		fmt.Fprintf(&b, "### %s (%s, +%d -%d)\n```diff\n%s\n```\n\n",
 			f.Path, f.Status, f.Additions, f.Deletions, f.Patch)
 	}
+	b.WriteString(scopeConstraintSection(in.Packed.Files))
 	return b.String()
 }
 

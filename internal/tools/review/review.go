@@ -42,7 +42,7 @@ Your single most important rule: ONLY post a finding if a careful human reviewer
 - Praise or "looks good". Approval is the right channel, not comments.
 - Generic suggestions like "consider tests", "you might want to refactor", "add error handling" without a concrete failure path.
 - Style preferences (var-name aesthetics, comment style, line length) that don't hide a real issue.
-- Things outside the diff that you noticed while reading context.
+- Lines NOT marked with a leading + in the diff. Only flag lines explicitly added or changed (the + lines). Context lines, unchanged lines, and removed (leading -) lines are out of scope even though they appear in the diff block.
 - Speculation: "if X happened, this could break" — only flag concrete, demonstrable failure modes.
 - Suggestions to use a different language feature when both work fine.
 - Findings whose body would be < 20 characters of substance.
@@ -105,7 +105,8 @@ func (Tool) Run(ctx context.Context, in tools.Input) (*tools.Result, error) {
 	if err := tools.CallJSON(ctx, in.LLM, in.Model, sys, user, &out); err != nil {
 		return nil, err
 	}
-	inline := convertFindings(out.Findings, in.Config)
+	changedMap := tools.BuildChangedMap(in.Packed.Files)
+	inline := convertFindings(out.Findings, in.Config, changedMap)
 	p := in.Config.CommentPolicy
 
 	// Clean run: zero post-threshold findings.
@@ -181,7 +182,7 @@ func silentTitle(inline []vcs.InlineComment) string {
 	return fmt.Sprintf("%d finding(s) below post threshold", len(inline))
 }
 
-func convertFindings(findings []Finding, cfg config.Repo) []vcs.InlineComment {
+func convertFindings(findings []Finding, cfg config.Repo, changedMap map[string][][2]int) []vcs.InlineComment {
 	threshold := severityRank(cfg.Review.SeverityThreshold)
 	maxComments := cfg.Review.MaxComments
 	if maxComments <= 0 {
@@ -189,6 +190,11 @@ func convertFindings(findings []Finding, cfg config.Repo) []vcs.InlineComment {
 	}
 	out := make([]vcs.InlineComment, 0, len(findings))
 	for _, f := range findings {
+		// Hard diff-anchor filter: drop findings the model placed on context,
+		// unchanged, or removed lines. File-level findings (line 0) pass.
+		if !tools.InChangedLines(changedMap[f.File], f.LineStart) {
+			continue
+		}
 		sev := vcs.Severity(strings.ToLower(f.Severity))
 		if severityRank(string(sev)) < threshold {
 			continue

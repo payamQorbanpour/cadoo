@@ -28,7 +28,7 @@ Respond with ONLY a JSON object:
 }
 
 Rules:
-- Only suggest changes that touch lines present in the diff.
+- Only suggest changes on lines explicitly marked with a leading + in the diff above. Context lines (no +/- prefix) are out of scope even though they appear in the diff block.
 - "code" must be a complete replacement for the [line_start, line_end] range.
 - "rationale" is the one-line action a reviewer would write in a thread: terse, imperative, no explanation paragraphs.
 - Return AT MOST 5 suggestions. Rank all candidates by impact; drop everything outside the top 5.
@@ -74,8 +74,14 @@ func (Tool) Run(ctx context.Context, in tools.Input) (*tools.Result, error) {
 	if err := tools.CallJSON(ctx, in.LLM, in.Model, sys, user, &out); err != nil {
 		return nil, err
 	}
+	changedMap := tools.BuildChangedMap(in.Packed.Files)
 	inlines := make([]vcs.InlineComment, 0, len(out.Suggestions))
 	for _, s := range out.Suggestions {
+		// Hard diff-anchor filter: drop suggestions placed on context,
+		// unchanged, or removed lines (the model treats them as fair game).
+		if !tools.InChangedLines(changedMap[s.File], s.LineStart) {
+			continue
+		}
 		inlines = append(inlines, vcs.InlineComment{
 			File:      s.File,
 			LineStart: s.LineStart,
