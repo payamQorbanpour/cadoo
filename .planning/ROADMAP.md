@@ -29,10 +29,16 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. A disabled artifact (`enabled:false`) or one whose `when:` excludes the bump is never generated; the changelog runs with LLM off and produces reproducible output.
   5. An artifact's `template:` override (loaded from the tag tree) replaces the preset; with no override, embedded preset templates are used.
   6. The flow is dogfooded end-to-end on Cadoo's own repository.
-**Plans**: TBD
+**Plans**: 7 plans
 
 Plans:
-- [ ] 01-01: TBD
+- [ ] 01-01-PLAN.md — Core contract layer: vcs capability interfaces + types, releasedocs types/interfaces, marker constants, config.ReleaseDocs schema, shared fake provider
+- [ ] 01-02-PLAN.md — ReleaseContext builder + grouped change model (conventional/labels), semver bump, Enabled gate (TDD)
+- [ ] 01-03-PLAN.md — Template subsystem: go:embed presets + tag-tree override loader (text/template)
+- [ ] 01-04-PLAN.md — VCS adapter capabilities (GitHub + GitLab): range read, release publish, branch-commit
+- [ ] 01-05-PLAN.md — Generators: deterministic-first changelog (golden-file) + release-notes (skeleton + tone narrative) (TDD)
+- [ ] 01-06-PLAN.md — Publishers: releasebody marker upsert + changelogpr single marker-keyed PR (idempotent, TDD)
+- [ ] 01-07-PLAN.md — Dispatcher + registry + release-docs CLI subcommand + dogfood on Cadoo's repo
 
 ### Phase 2: Webhook Auto-Trigger + State
 **Goal**: A published release (or configured tag push) on a customer repo automatically triggers release-docs generation through the dual-mode queue and worker, with DB-backed state so re-syncs edit in place, plus the pages publisher and blog generator.
@@ -69,6 +75,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Generators + Publishers + CLI | 0/TBD | Not started | - |
+| 1. Generators + Publishers + CLI | 0/7 | Not started | - |
 | 2. Webhook Auto-Trigger + State | 0/TBD | Not started | - |
 | 3. API Docs / OpenAPI | 0/TBD | Not started | - |
