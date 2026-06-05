@@ -304,8 +304,9 @@ func (a *Adapter) OpenOrUpdatePR(ctx context.Context, repo, branch, base, title,
 	return int64(created.IID), nil
 }
 
-// Compile-time assertions: *Adapter must satisfy the three optional capability
+// Compile-time assertions: *Adapter must satisfy the optional capability
 // interfaces declared in internal/vcs/vcs.go.
 var _ vcs.ReleaseRangeReader = (*Adapter)(nil)
 var _ vcs.ReleasePublisher = (*Adapter)(nil)
+var _ vcs.TagReleasePublisher = (*Adapter)(nil)
 var _ vcs.BranchCommitter = (*Adapter)(nil)
