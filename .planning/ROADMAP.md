@@ -108,7 +108,7 @@ Plans:
 Plans:
 **Wave 1** *(BLOCKING — deps + model/wiring foundation)*
 
-- [ ] 03-01-PLAN.md — Wave 0 foundation: go get libopenapi + libopenapi-validator, vendor Redoc bundle, Artifact.Filename + KindAPIDocs + MultiGenerator + dispatcher spread, pages-publisher Filename change, APIDocsConfig
+- [x] 03-01-PLAN.md — Wave 0 foundation: go get libopenapi + libopenapi-validator, vendor Redoc bundle, Artifact.Filename + KindAPIDocs + MultiGenerator + dispatcher spread, pages-publisher Filename change, APIDocsConfig
 
 **Wave 2** *(blocked on 03-01)*
 
@@ -135,4 +135,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Generators + Publishers + CLI | 7/7 | Complete   | 2026-06-05 |
 | 2. Webhook Auto-Trigger + State | 6/6 | Complete   | 2026-06-05 |
-| 3. API Docs / OpenAPI | 0/5 | Planned | - |
+| 3. API Docs / OpenAPI | 1/5 | In Progress|  |
