@@ -153,41 +153,91 @@ func TestEnabled(t *testing.T) {
 	}
 }
 
-// TestDiscoverSpec covers the spec discovery logic (D-02):
+// TestDiscoverSpec covers the spec discovery logic (D-02) via GenerateMulti:
 // - explicit SpecPath → fetch that path, no fallback
 // - empty SpecPath → ordered fallback list, first hit wins
-// - all paths 404 → error
-//
-// NOTE: discoverSpec is an internal function. These tests drive it via
-// GenerateMulti. Once Plans 03-05 land and GenerateMulti calls discoverSpec,
-// the assertions on artifact count will activate. Until then, they skip.
+// - all paths 404 → no artifacts, no error (D-10 skip)
 func TestDiscoverSpec(t *testing.T) {
 	t.Parallel()
 
 	t.Run("explicit spec path fetched directly", func(t *testing.T) {
-		t.Skip("TODO(03-03): activate once discoverSpec is wired in GenerateMulti (Plan 03)")
+		t.Parallel()
+		v3Bytes := mustReadFixture(t, "petstore_v3.yaml")
+		// Only "custom/api.yaml" is served; fallback paths are absent (→ 404).
+		// With specPath set, the generator must fetch exactly that path — not any fallback.
+		rc := fixtureAPIDocsRC(
+			map[string][]byte{"custom/api.yaml": v3Bytes},
+			"custom/api.yaml", "", true, releasedocs.BumpMinor,
+		)
+		g := apidocs.New()
+		arts, err := g.GenerateMulti(context.Background(), rc)
+		if err != nil {
+			t.Fatalf("GenerateMulti: %v", err)
+		}
+		if len(arts) == 0 {
+			t.Fatal("GenerateMulti returned 0 artifacts; expected ≥1 when explicit specPath resolves")
+		}
 	})
 
 	t.Run("fallback first hit wins", func(t *testing.T) {
-		t.Skip("TODO(03-03): activate once discoverSpec is wired in GenerateMulti (Plan 03)")
+		t.Parallel()
+		v3Bytes := mustReadFixture(t, "petstore_v3.yaml")
+		// openapi.yml is the second fallback in the D-02 order;
+		// openapi.yaml (first) is absent so the loop must advance and find openapi.yml.
+		rc := fixtureAPIDocsRC(
+			map[string][]byte{"openapi.yml": v3Bytes},
+			"", "", true, releasedocs.BumpMinor,
+		)
+		g := apidocs.New()
+		arts, err := g.GenerateMulti(context.Background(), rc)
+		if err != nil {
+			t.Fatalf("GenerateMulti: %v", err)
+		}
+		if len(arts) == 0 {
+			t.Fatal("GenerateMulti returned 0 artifacts; expected ≥1 when fallback path resolves")
+		}
 	})
 
 	t.Run("all paths 404 returns error", func(t *testing.T) {
-		t.Skip("TODO(03-03): activate once discoverSpec is wired in GenerateMulti (Plan 03)")
+		t.Parallel()
+		// Empty file map → every path returns 404 → discoverSpec exhausts fallbacks.
+		rc := fixtureAPIDocsRC(nil, "", "", true, releasedocs.BumpMinor)
+		g := apidocs.New()
+		arts, err := g.GenerateMulti(context.Background(), rc)
+		if err != nil {
+			t.Errorf("GenerateMulti with all-404: got error %v; want nil (D-10 skip)", err)
+		}
+		if len(arts) != 0 {
+			t.Errorf("GenerateMulti with all-404: got %d artifacts; want 0 (D-10 skip)", len(arts))
+		}
 	})
 }
 
 // TestGenerate_FetchesAtToRef verifies that the spec is fetched at rc.ToRef (D-01).
+// discoverSpec passes rc.ToRef to FetchFileFromRef; fakeFetcher ignores the ref
+// argument and serves from its map regardless, so this test verifies the
+// positive-case: spec found → artifacts returned.
 func TestGenerate_FetchesAtToRef(t *testing.T) {
 	t.Parallel()
-	t.Skip("TODO(03-03): activate once GenerateMulti is implemented (Plan 03 wires discoverSpec)")
+	v3Bytes := mustReadFixture(t, "petstore_v3.yaml")
+	rc := fixtureAPIDocsRC(
+		map[string][]byte{"openapi.yaml": v3Bytes},
+		"openapi.yaml", "", true, releasedocs.BumpMinor,
+	)
+	g := apidocs.New()
+	arts, err := g.GenerateMulti(context.Background(), rc)
+	if err != nil {
+		t.Fatalf("GenerateMulti: %v", err)
+	}
+	if len(arts) == 0 {
+		t.Fatal("GenerateMulti returned 0 artifacts; expected spec fetched at ToRef")
+	}
 }
 
 // TestGenerate_ThreeArtifacts verifies that GenerateMulti returns exactly three
 // artifacts with Filenames openapi.yaml, api-reference.html, api-reference.md (D-04).
 func TestGenerate_ThreeArtifacts(t *testing.T) {
 	t.Parallel()
-	t.Skip("TODO(03-03): activate once GenerateMulti is implemented (Plan 03-05)")
 
 	v3Bytes := mustReadFixture(t, "petstore_v3.yaml")
 	rc := fixtureAPIDocsRC(
@@ -222,7 +272,6 @@ func TestGenerate_ThreeArtifacts(t *testing.T) {
 // contains exactly the fetched bytes (no re-serialization) (D-03).
 func TestGenerate_RawSpecPassthrough(t *testing.T) {
 	t.Parallel()
-	t.Skip("TODO(03-03): activate once GenerateMulti is implemented (Plan 03-05)")
 
 	v3Bytes := mustReadFixture(t, "petstore_v3.yaml")
 	rc := fixtureAPIDocsRC(
@@ -256,7 +305,6 @@ func TestGenerate_RawSpecPassthrough(t *testing.T) {
 // produces 3 artifacts (D-09).
 func TestGenerate_Swagger2(t *testing.T) {
 	t.Parallel()
-	t.Skip("TODO(03-03): activate once GenerateMulti handles Swagger 2.0 (Plan 03-05)")
 
 	v2Bytes := mustReadFixture(t, "petstore_v2.yaml")
 	rc := fixtureAPIDocsRC(
@@ -278,7 +326,6 @@ func TestGenerate_Swagger2(t *testing.T) {
 // 3 artifacts (D-09).
 func TestGenerate_OAS3(t *testing.T) {
 	t.Parallel()
-	t.Skip("TODO(03-03): activate once GenerateMulti handles OAS 3.0 (Plan 03-05)")
 
 	v3Bytes := mustReadFixture(t, "petstore_v3.yaml")
 	rc := fixtureAPIDocsRC(
@@ -300,7 +347,6 @@ func TestGenerate_OAS3(t *testing.T) {
 // 3 artifacts (D-09).
 func TestGenerate_OAS31(t *testing.T) {
 	t.Parallel()
-	t.Skip("TODO(03-03): activate once GenerateMulti handles OAS 3.1 (Plan 03-05)")
 
 	v31Bytes := mustReadFixture(t, "petstore_v31.yaml")
 	rc := fixtureAPIDocsRC(
@@ -322,7 +368,6 @@ func TestGenerate_OAS31(t *testing.T) {
 // GenerateMulti returns (nil, nil) — no artifacts, no error (D-10).
 func TestGenerate_NoSpec_Skips(t *testing.T) {
 	t.Parallel()
-	t.Skip("TODO(03-03): activate once GenerateMulti calls discoverSpec (Plan 03)")
 
 	// No files in map → every path returns 404.
 	rc := fixtureAPIDocsRC(nil, "", "", true, releasedocs.BumpMinor)
@@ -341,7 +386,6 @@ func TestGenerate_NoSpec_Skips(t *testing.T) {
 // GenerateMulti to skip (nil, nil) without returning an error (D-10).
 func TestGenerate_ParseFailure_Skips(t *testing.T) {
 	t.Parallel()
-	t.Skip("TODO(03-03): activate once GenerateMulti calls parseSpec (Plan 03)")
 
 	invalidBytes := mustReadFixture(t, "invalid.yaml")
 	rc := fixtureAPIDocsRC(
@@ -392,7 +436,6 @@ paths: {}
 // with a logged reason (D-10).
 func TestGenerate_UnsupportedVersion_Skips(t *testing.T) {
 	t.Parallel()
-	t.Skip("TODO(03-03): activate once parseSpec checks SpecType/version (Plan 03)")
 
 	unsupportedSpec := []byte(`openapi: 3.2.0
 info:
@@ -420,7 +463,6 @@ paths: {}
 // outbound HTTP/file fetch (T-03-03, security SSRF guard).
 func TestGenerate_NoRemoteRef(t *testing.T) {
 	t.Parallel()
-	t.Skip("TODO(03-03): activate once parseSpec uses AllowRemoteReferences=false (Plan 03)")
 
 	remoteRefBytes := mustReadFixture(t, "remote_ref.yaml")
 	rc := fixtureAPIDocsRC(
