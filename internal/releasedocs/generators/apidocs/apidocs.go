@@ -4,15 +4,11 @@
 // self-contained Redoc HTML reference, and a deterministic Markdown reference.
 // The generator is fully deterministic (no LLM). When no valid spec exists,
 // it skips all three artifacts with a logged reason (D-10).
-//
-// Implementation: Plans 03-05 fill in parse.go, render_html.go, and
-// render_markdown.go. This file provides the Generator/MultiGenerator
-// scaffolding and the Enabled gate (D-07/D-08). The stub GenerateMulti
-// returns (nil, nil) until Plans 03-05 land.
 package apidocs
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/payamqorbanpour/cadoo/internal/config"
 	"github.com/payamqorbanpour/cadoo/internal/releasedocs"
@@ -57,19 +53,52 @@ func (g *Generator) Generate(_ context.Context, _ releasedocs.ReleaseContext) (r
 // GenerateMulti implements releasedocs.MultiGenerator. It fetches the committed
 // OpenAPI/Swagger spec via FileFetcher, validates it, and emits three artifacts:
 //   - openapi.yaml: raw spec bytes (D-03, D-09)
-//   - api-reference.html: self-contained Redoc HTML (D-05)
-//   - api-reference.md: deterministic Markdown reference (D-06)
+//   - api-reference.html: self-contained Redoc HTML (D-05) — TODO(03-04)
+//   - api-reference.md: deterministic Markdown reference (D-06) — TODO(03-05)
 //
 // On any skip condition (spec not found, parse failure, validation failure,
 // unsupported version), it returns (nil, nil) and logs the reason (D-10).
 // It never returns a non-nil error for skip conditions.
-//
-// NOTE: Plans 03-05 implement discoverSpec, parseSpec, buildRedocHTML, and
-// renderMarkdown. Until those plans land, GenerateMulti returns (nil, nil).
-func (g *Generator) GenerateMulti(_ context.Context, _ releasedocs.ReleaseContext) ([]releasedocs.Artifact, error) {
-	// TODO(03-03): implement discoverSpec + parseSpec + render pipeline.
-	// Until Plans 03-05 land, return nil (skip-with-no-error, D-10 stub).
-	return nil, nil
+func (g *Generator) GenerateMulti(ctx context.Context, rc releasedocs.ReleaseContext) ([]releasedocs.Artifact, error) {
+	// Step 1: discover the committed spec (D-01, D-02).
+	specBytes, err := discoverSpec(ctx, rc)
+	if err != nil {
+		slog.Warn("apidocs: skipping — could not discover spec",
+			"repo", rc.Repo, "toRef", rc.ToRef, "err", err)
+		return nil, nil // D-10: skip with logged reason, no error returned
+	}
+
+	// Step 2: parse, version-detect, validate, extract path model (D-09, D-10).
+	_, err = loadSpec(specBytes)
+	if err != nil {
+		slog.Warn("apidocs: skipping — spec parse/validation failed",
+			"repo", rc.Repo, "toRef", rc.ToRef, "err", err)
+		return nil, nil // D-10: skip with logged reason, no error returned
+	}
+
+	// Step 3: Build the three artifacts (D-04).
+	// Artifact 1: raw spec passthrough (D-03).
+	rawSpec := releasedocs.Artifact{
+		Kind:     releasedocs.KindAPIDocs,
+		Filename: "openapi.yaml",
+		Content:  specBytes,
+	}
+
+	// Artifact 2: self-contained Redoc HTML (D-05) — TODO(03-04): implement buildRedocHTML.
+	redocHTML := releasedocs.Artifact{
+		Kind:     releasedocs.KindAPIDocs,
+		Filename: "api-reference.html",
+		Content:  []byte{}, // TODO(03-04): fill in with buildRedocHTML result
+	}
+
+	// Artifact 3: deterministic Markdown reference (D-06) — TODO(03-05): implement renderMarkdown.
+	mdRef := releasedocs.Artifact{
+		Kind:     releasedocs.KindAPIDocs,
+		Filename: "api-reference.md",
+		Content:  []byte{}, // TODO(03-05): fill in with renderMarkdown result
+	}
+
+	return []releasedocs.Artifact{rawSpec, redocHTML, mdRef}, nil
 }
 
 // Compile-time assertions: Generator implements both releasedocs.Generator
