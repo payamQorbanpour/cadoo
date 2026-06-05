@@ -57,6 +57,7 @@ func handleGithubRelease(ctx context.Context, e *gogithub.ReleaseEvent, releaseT
 		Provider: vcs.KindGitHub,
 		Repo:     repo,
 		ToRef:    toRef,
+		// TODO: populate Org from installation→org resolution (same gap as ToolJob.InstallID)
 	}
 	if err := enqueue(ctx, job); err != nil {
 		slog.Error("releasedocs: enqueue github release job", "err", err, "repo", repo, "tag", toRef)
@@ -117,6 +118,7 @@ func handleGithubTagPush(ctx context.Context, e *gogithub.PushEvent, releaseTrig
 		Provider: vcs.KindGitHub,
 		Repo:     repo,
 		ToRef:    tagName,
+		// TODO: populate Org from installation→org resolution (same gap as ToolJob.InstallID)
 	}
 	if err := enqueue(ctx, job); err != nil {
 		slog.Error("releasedocs: enqueue github tag push job", "err", err, "repo", repo, "tag", tagName)
@@ -155,6 +157,7 @@ func handleGitlabRelease(ctx context.Context, e *glab.ReleaseEvent, releaseTrigg
 		Provider: vcs.KindGitLab,
 		Repo:     repo,
 		ToRef:    toRef,
+		// TODO: populate Org from installation→org resolution (same gap as ToolJob.InstallID)
 	}
 	if err := enqueue(ctx, job); err != nil {
 		slog.Error("releasedocs: enqueue gitlab release job", "err", err, "repo", repo, "tag", toRef)
@@ -209,6 +212,7 @@ func handleGitlabTagPush(ctx context.Context, e *glab.TagEvent, releaseTrigger, 
 		Provider: vcs.KindGitLab,
 		Repo:     repo,
 		ToRef:    tagName,
+		// TODO: populate Org from installation→org resolution (same gap as ToolJob.InstallID)
 	}
 	if err := enqueue(ctx, job); err != nil {
 		slog.Error("releasedocs: enqueue gitlab tag push job", "err", err, "repo", repo, "tag", tagName)
