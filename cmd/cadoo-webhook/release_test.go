@@ -60,7 +60,7 @@ func TestHandleGithubRelease_NonPublished(t *testing.T) {
 		tagName := "v1.0.0"
 		fullName := "owner/repo"
 		e := &gogithub.ReleaseEvent{
-			Action: &action,
+			Action:  &action,
 			Release: &gogithub.RepositoryRelease{TagName: &tagName},
 			Repo:    &gogithub.Repository{FullName: &fullName},
 		}
@@ -389,4 +389,31 @@ func TestTriggerEarlyExit(t *testing.T) {
 			t.Errorf("trigger=release: gitlab tag push should not enqueue; got %d", len(rec.jobs))
 		}
 	})
+}
+
+// TestHandleGitlabTagPush_NonTagRef verifies that a GitLab push event whose
+// Ref does not start with "refs/tags/" is silently dropped (WR-02 guard).
+func TestHandleGitlabTagPush_NonTagRef(t *testing.T) {
+	cases := []struct {
+		name string
+		ref  string
+	}{
+		{"branch ref", "refs/heads/main"},
+		{"bare branch name", "main"},
+		{"empty ref", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := &recordingEnqueue{}
+			e := &glab.TagEvent{
+				Ref:     tc.ref,
+				After:   "abc123def456",
+				Project: glab.TagEventProject{PathWithNamespace: "g/r"},
+			}
+			handleGitlabTagPush(context.Background(), e, "tag", "v*", rec.enqueue)
+			if len(rec.jobs) != 0 {
+				t.Errorf("ref=%q: expected no enqueue for non-tag ref, got %d", tc.ref, len(rec.jobs))
+			}
+		})
+	}
 }

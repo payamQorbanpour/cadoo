@@ -189,6 +189,12 @@ func handleGitlabTagPush(ctx context.Context, e *glab.TagEvent, releaseTrigger, 
 		return
 	}
 
+	if !strings.HasPrefix(e.Ref, "refs/tags/") {
+		slog.Debug("releasedocs: gitlab tag push ref is not a tag ref; skipping",
+			"ref", e.Ref)
+		return
+	}
+
 	tagName := strings.TrimPrefix(e.Ref, "refs/tags/")
 	repo := e.Project.PathWithNamespace
 

@@ -11,6 +11,7 @@ package blog
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/payamqorbanpour/cadoo/internal/config"
@@ -64,6 +65,8 @@ func (g *Generator) Generate(ctx context.Context, rc releasedocs.ReleaseContext)
 	narrative, err := narrateWithLLM(ctx, rc.LLM, rc.Model, skeleton)
 	if err != nil {
 		// Narrative failure is non-fatal: fall back to skeleton (D-10).
+		slog.Warn("blog: LLM narrative failed; falling back to skeleton",
+			"repo", rc.Repo, "toRef", rc.ToRef, "err", err)
 		return releasedocs.Artifact{
 			Kind:    releasedocs.KindBlog,
 			Content: []byte(skeleton),

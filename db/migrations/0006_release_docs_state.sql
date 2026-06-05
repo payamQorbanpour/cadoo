@@ -15,6 +15,8 @@ CREATE TABLE release_docs_state (
     external_id    TEXT,                             -- release body ID, PR number, pages commit SHA, etc.
     published_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- org_id intentionally excluded from UNIQUE until webhook Org resolution is wired (WR-04/CR-02).
+    -- Once Org is populated in ReleaseJob, migrate this to UNIQUE (org_id, provider, repo_full_name, to_tag, artifact_kind).
     UNIQUE (provider, repo_full_name, to_tag, artifact_kind)
 );
 CREATE INDEX release_docs_state_repo_idx

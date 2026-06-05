@@ -224,10 +224,15 @@ func (a *Adapter) UpsertFile(ctx context.Context, repo, branch, commitMessage st
 
 	if getErr != nil {
 		// File doesn't exist (or branch doesn't exist) — create it.
-		// Use start_branch="main" so GitLab creates the branch if needed.
+		// Resolve the project's default branch so start_branch is correct for
+		// repos that use "master", "develop", "trunk", etc. instead of "main".
+		startBranch := "main"
+		if proj, _, projErr := a.client.Projects.GetProject(repo, nil, glab.WithContext(ctx)); projErr == nil && proj != nil && proj.DefaultBranch != "" {
+			startBranch = proj.DefaultBranch
+		}
 		_, _, err := a.client.RepositoryFiles.CreateFile(repo, f.Path, &glab.CreateFileOptions{
 			Branch:        ptr(branch),
-			StartBranch:   ptr("main"),
+			StartBranch:   ptr(startBranch),
 			Content:       ptr(content),
 			Encoding:      ptr("base64"),
 			CommitMessage: ptr(commitMessage),

@@ -180,6 +180,7 @@ func buildEnqueue(ctx context.Context, s *settings.Settings, pool *pgxpool.Pool,
 	return enqueue, enqueueRelease, func() {}
 }
 
+// TODO: DRY with cadoo-worker buildDispatcher — these two are nearly identical (WR-05).
 func buildDispatcher(s *settings.Settings, pool *pgxpool.Pool) (*orchestrator.Dispatcher, error) {
 	pool2 := map[vcs.Kind]vcs.Provider{}
 	if s.HasGitHub() {
