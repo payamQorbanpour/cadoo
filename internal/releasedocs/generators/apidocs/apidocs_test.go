@@ -25,8 +25,8 @@ var updateGolden = os.Getenv("TEST_UPDATE_GOLDEN") == "1"
 // It also wraps a releasedocstest.Fake to satisfy vcs.Provider so it can be
 // used directly as ReleaseContext.Provider.
 type fakeFetcher struct {
-	files map[string][]byte // path → content; absent path → 404 error
-	vcs.Provider            // embedded provider satisfies the vcs.Provider interface
+	files        map[string][]byte // path → content; absent path → 404 error
+	vcs.Provider                   // embedded provider satisfies the vcs.Provider interface
 }
 
 // FetchFileFromRef implements releasedocs.FileFetcher.
