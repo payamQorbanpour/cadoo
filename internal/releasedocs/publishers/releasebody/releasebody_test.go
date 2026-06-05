@@ -10,6 +10,42 @@ import (
 	"github.com/payamqorbanpour/cadoo/internal/vcs"
 )
 
+// minimalProvider implements only vcs.Provider with no optional capabilities.
+// It is used for degradation tests: type-assertions to vcs.ReleasePublisher,
+// vcs.BranchCommitter, etc. will return (nil, false) as intended.
+// Note: releasedocstest.NewFake(OmitReleasePublisher()) does NOT achieve this
+// because the wrapper embeds *Fake which promotes all methods (see plan-02
+// SUMMARY deviation note).
+type minimalProvider struct{}
+
+func (m *minimalProvider) Kind() vcs.Kind { return vcs.KindGitHub }
+func (m *minimalProvider) FetchPullRequest(_ context.Context, _ string, _ int64) (*vcs.PullRequest, error) {
+	return &vcs.PullRequest{}, nil
+}
+func (m *minimalProvider) ListChangedFiles(_ context.Context, _ *vcs.PullRequest) ([]vcs.FileChange, error) {
+	return nil, nil
+}
+func (m *minimalProvider) PostSummaryComment(_ context.Context, _ *vcs.PullRequest, _ string) (string, error) {
+	return "", nil
+}
+func (m *minimalProvider) UpdateSummaryComment(_ context.Context, _ *vcs.PullRequest, _, _ string) error {
+	return nil
+}
+func (m *minimalProvider) PostInlineComments(_ context.Context, _ *vcs.PullRequest, _ []vcs.InlineComment) ([]vcs.PostedInlineRef, error) {
+	return nil, nil
+}
+func (m *minimalProvider) ResolveThread(_ context.Context, _ *vcs.PullRequest, _ string) error {
+	return nil
+}
+func (m *minimalProvider) EditPullRequestBody(_ context.Context, _ *vcs.PullRequest, _ string) error {
+	return nil
+}
+func (m *minimalProvider) UpsertCheckRun(_ context.Context, _ *vcs.PullRequest, _ vcs.CheckRun) error {
+	return nil
+}
+
+var _ vcs.Provider = (*minimalProvider)(nil)
+
 // TestSplicePreserves verifies the releasebody publisher:
 //  1. Injects the Cadoo-managed block into a release body that has user content
 //     outside the markers.
@@ -87,19 +123,20 @@ func TestSplicePreserves(t *testing.T) {
 // TestReleaseBodyDegrades verifies that when the provider does NOT implement
 // vcs.ReleasePublisher, Publish returns nil (graceful degradation; D-15) and
 // does not attempt any write.
+//
+// We use an inline minimalProvider rather than releasedocstest.NewFake(OmitReleasePublisher())
+// because the fake's wrapper types embed *Fake which promotes all methods, making
+// type assertions to capability interfaces always succeed (see plan-02 SUMMARY).
 func TestReleaseBodyDegrades(t *testing.T) {
 	t.Parallel()
 
 	p := releasebody.Publisher{}
 
-	fake, provider := releasedocstest.NewFake(releasedocstest.OmitReleasePublisher())
-	_ = fake // silence unused warning
-
 	rc := releasedocs.ReleaseContext{
 		Repo:     "owner/repo",
 		Org:      "org1",
 		ToRef:    "v1.2.3",
-		Provider: provider,
+		Provider: &minimalProvider{},
 	}
 	arts := []releasedocs.Artifact{
 		{Kind: releasedocs.KindReleaseNotes, Content: []byte("notes")},
@@ -108,9 +145,8 @@ func TestReleaseBodyDegrades(t *testing.T) {
 	if err := p.Publish(context.Background(), rc, arts); err != nil {
 		t.Fatalf("Publish with missing ReleasePublisher capability: got error %v; want nil", err)
 	}
-	if fake.UpdateReleaseBodyCalls != 0 {
-		t.Fatalf("UpdateReleaseBodyCalls = %d; want 0 (capability absent)", fake.UpdateReleaseBodyCalls)
-	}
+	// Nothing further to assert — the test passes if Publish returned nil
+	// without panicking (the minimalProvider has no UpdateReleaseBody to call).
 }
 
 // --- helpers ---
