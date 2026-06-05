@@ -13,7 +13,7 @@ This milestone adds Release Docs to Cadoo: a parallel `internal/releasedocs` sub
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Generators + Publishers + CLI** - Stateless `cadoo release-docs` generates changelog + release notes and publishes to release body + CHANGELOG.md PR; dogfooded on Cadoo's own repo
+- [x] **Phase 1: Generators + Publishers + CLI** - Stateless `cadoo release-docs` generates changelog + release notes and publishes to release body + CHANGELOG.md PR; dogfooded on Cadoo's own repo (completed 2026-06-05)
 - [ ] **Phase 2: Webhook Auto-Trigger + State** - Release/tag webhook ingestion, ReleaseJob enqueue, worker consumer, DB state table, pages publisher, blog generator
 - [ ] **Phase 3: API Docs / OpenAPI** - Code-derived extraction (narrow framework set), apidocs generator, pages output
 
@@ -56,7 +56,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 01-07-PLAN.md — Dispatcher + registry + release-docs CLI subcommand + dogfood on Cadoo's repo
+- [x] 01-07-PLAN.md — Dispatcher + registry + release-docs CLI subcommand + dogfood on Cadoo's repo
 
 ### Phase 2: Webhook Auto-Trigger + State
 
@@ -101,6 +101,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Generators + Publishers + CLI | 6/7 | In Progress|  |
+| 1. Generators + Publishers + CLI | 7/7 | Complete   | 2026-06-05 |
 | 2. Webhook Auto-Trigger + State | 0/TBD | Not started | - |
 | 3. API Docs / OpenAPI | 0/TBD | Not started | - |
