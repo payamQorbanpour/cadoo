@@ -81,8 +81,8 @@ Plans:
 
 **Wave 2** *(parallel; blocked on 02-01)*
 
-- [ ] 02-03-PLAN.md — Blog generator (long-form, when: minor_or_above, nil-tolerant) (TDD)
-- [ ] 02-04-PLAN.md — Pages publisher (deterministic paths via BranchCommitter.UpsertFile, idempotent overwrite)
+- [x] 02-03-PLAN.md — Blog generator (long-form, when: minor_or_above, nil-tolerant) (TDD)
+- [x] 02-04-PLAN.md — Pages publisher (deterministic paths via BranchCommitter.UpsertFile, idempotent overwrite)
 
 **Wave 3** *(blocked on Wave 2)*
 
@@ -117,5 +117,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Generators + Publishers + CLI | 7/7 | Complete   | 2026-06-05 |
-| 2. Webhook Auto-Trigger + State | 2/6 | In Progress|  |
+| 2. Webhook Auto-Trigger + State | 4/6 | In Progress|  |
 | 3. API Docs / OpenAPI | 0/TBD | Not started | - |
