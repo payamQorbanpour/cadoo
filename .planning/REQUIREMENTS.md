@@ -21,7 +21,7 @@ Requirements for the Release Docs milestone. Each maps to roadmap phases.
 - [ ] **REQ-configurable-templates**: Two configurability layers — presets out of the box, custom override template files for full control.
   - Acceptance: presets (`preset:`, `grouping.source`, `tone:`) work with no template authoring; any artifact may set `template:` (Go `text/template`, loaded from the tag tree) overriding the preset; templates receive the `ReleaseContext` plus the grouped change model; defaults to embedded preset templates in `internal/releasedocs/template`.
 
-- [ ] **REQ-release-docs-idempotency**: Idempotent across re-runs/resyncs (re-tagging, edited release) — edit-in-place, no duplicates.
+- [x] **REQ-release-docs-idempotency**: Idempotent across re-runs/resyncs (re-tagging, edited release) — edit-in-place, no duplicates.
   - Acceptance: running the dispatcher twice over the same range edits the release body (not duplicated), keeps a single changelog PR, and uses stable pages paths; works both DB-backed and via stateless marker reconstruction (CLI/CI mode).
   - Delivery: stateless/marker mode in Phase 1; DB-backed state table + migration in Phase 2.
 

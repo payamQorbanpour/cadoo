@@ -77,7 +77,7 @@ Plans:
 **Wave 1** *(parallel)*
 
 - [x] 02-01-PLAN.md — CR-01 fix (TagReleasePublisher) + config schema (Blog, PagesPublishTarget) + KindBlog/TargetPages constants
-- [ ] 02-02-PLAN.md — Migration 0006 release_docs_state + nil-tolerant state.Store (DB-backed idempotency)
+- [x] 02-02-PLAN.md — Migration 0006 release_docs_state + nil-tolerant state.Store (DB-backed idempotency)
 
 **Wave 2** *(parallel; blocked on 02-01)*
 
@@ -117,5 +117,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Generators + Publishers + CLI | 7/7 | Complete   | 2026-06-05 |
-| 2. Webhook Auto-Trigger + State | 1/6 | In Progress|  |
+| 2. Webhook Auto-Trigger + State | 2/6 | In Progress|  |
 | 3. API Docs / OpenAPI | 0/TBD | Not started | - |
