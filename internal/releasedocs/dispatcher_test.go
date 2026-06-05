@@ -2,6 +2,7 @@ package releasedocs_test
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"strings"
 	"testing"
@@ -296,6 +297,147 @@ func TestDispatcherNoProvider(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "no adapter for provider") {
 		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+// recordingStore is a test PostedStore implementation that captures Record calls.
+type recordingStore struct {
+	calls []recordedCall
+}
+
+type recordedCall struct {
+	org, provider, repoFullName, toTag, kind, externalID string
+}
+
+func (s *recordingStore) Record(_ context.Context, org, provider, repoFullName, toTag, kind, externalID string) error {
+	s.calls = append(s.calls, recordedCall{org, provider, repoFullName, toTag, kind, externalID})
+	return nil
+}
+
+// errorPublisher is a Publisher that always returns an error.
+type errorPublisher struct {
+	target releasedocs.PublishTarget
+}
+
+func (p *errorPublisher) Target() releasedocs.PublishTarget { return p.target }
+func (p *errorPublisher) Publish(_ context.Context, _ releasedocs.ReleaseContext, _ []releasedocs.Artifact) error {
+	return fmt.Errorf("publisher %s: intentional error for test", p.target)
+}
+
+// TestPostedStoreNilNoOp verifies that with Store == nil, Run behaves exactly
+// as before — no panic, and no Record calls.
+func TestPostedStoreNilNoOp(t *testing.T) {
+	fake, provider := releasedocstest.NewFake()
+	fake.FetchErr = fs.ErrNotExist
+
+	gen := &recordingGenerator{kind: releasedocs.KindChangelog, enabled: true}
+	pub := &recordingPublisher{target: releasedocs.TargetChangelogPR}
+
+	// Store is nil (not set) — stateless marker mode preserved (D-14).
+	d := &releasedocs.Dispatcher{
+		VCSPool:    map[vcs.Kind]vcs.Provider{vcs.KindGitHub: provider},
+		LLM:        nil,
+		Generators: []releasedocs.Generator{gen},
+		Publishers: []releasedocs.Publisher{pub},
+		BaseCfg:    enabledCfg(),
+		Store:      nil,
+	}
+
+	ctx := context.Background()
+	if err := d.Run(ctx, job()); err != nil {
+		t.Fatalf("Run with nil Store: %v", err)
+	}
+
+	// Publisher should have been called normally.
+	if pub.calls != 1 {
+		t.Errorf("publisher calls = %d, want 1", pub.calls)
+	}
+	// Generator should have been called normally.
+	if gen.calls != 1 {
+		t.Errorf("generator calls = %d, want 1", gen.calls)
+	}
+}
+
+// TestPostedStoreRecordsOnSuccess verifies that with Store set to a recording
+// fake, after a successful run that produced artifacts, Run calls Record once
+// per produced artifact with the correct args.
+func TestPostedStoreRecordsOnSuccess(t *testing.T) {
+	fake, provider := releasedocstest.NewFake()
+	fake.FetchErr = fs.ErrNotExist
+
+	gen := &recordingGenerator{kind: releasedocs.KindChangelog, enabled: true}
+	pub := &recordingPublisher{target: releasedocs.TargetChangelogPR}
+	store := &recordingStore{}
+
+	j := job() // Org: "org1", Provider: github, Repo: "owner/repo", ToRef: "v0.2.0"
+
+	d := &releasedocs.Dispatcher{
+		VCSPool:    map[vcs.Kind]vcs.Provider{vcs.KindGitHub: provider},
+		LLM:        nil,
+		Generators: []releasedocs.Generator{gen},
+		Publishers: []releasedocs.Publisher{pub},
+		BaseCfg:    enabledCfg(),
+		Store:      store,
+	}
+
+	ctx := context.Background()
+	if err := d.Run(ctx, j); err != nil {
+		t.Fatalf("Run with recording Store: %v", err)
+	}
+
+	// One artifact produced (KindChangelog) → one Record call.
+	if len(store.calls) != 1 {
+		t.Fatalf("Record calls = %d, want 1", len(store.calls))
+	}
+	call := store.calls[0]
+	if call.org != j.Org {
+		t.Errorf("Record org = %q, want %q", call.org, j.Org)
+	}
+	if call.provider != string(j.Provider) {
+		t.Errorf("Record provider = %q, want %q", call.provider, string(j.Provider))
+	}
+	if call.repoFullName != j.Repo {
+		t.Errorf("Record repoFullName = %q, want %q", call.repoFullName, j.Repo)
+	}
+	if call.toTag != j.ToRef {
+		t.Errorf("Record toTag = %q, want %q", call.toTag, j.ToRef)
+	}
+	if call.kind != string(releasedocs.KindChangelog) {
+		t.Errorf("Record kind = %q, want %q", call.kind, string(releasedocs.KindChangelog))
+	}
+	if call.externalID != j.ToRef {
+		t.Errorf("Record externalID = %q, want %q", call.externalID, j.ToRef)
+	}
+}
+
+// TestPostedStoreNoRecordOnPublishError verifies that when a publisher returns
+// an error, Record is NOT called (state only recorded on success).
+func TestPostedStoreNoRecordOnPublishError(t *testing.T) {
+	fake, provider := releasedocstest.NewFake()
+	fake.FetchErr = fs.ErrNotExist
+
+	gen := &recordingGenerator{kind: releasedocs.KindChangelog, enabled: true}
+	errPub := &errorPublisher{target: releasedocs.TargetChangelogPR}
+	store := &recordingStore{}
+
+	d := &releasedocs.Dispatcher{
+		VCSPool:    map[vcs.Kind]vcs.Provider{vcs.KindGitHub: provider},
+		LLM:        nil,
+		Generators: []releasedocs.Generator{gen},
+		Publishers: []releasedocs.Publisher{errPub},
+		BaseCfg:    enabledCfg(),
+		Store:      store,
+	}
+
+	ctx := context.Background()
+	err := d.Run(ctx, job())
+	if err == nil {
+		t.Fatal("Run with erroring publisher: expected error, got nil")
+	}
+
+	// Publisher error → zero Record calls.
+	if len(store.calls) != 0 {
+		t.Errorf("Record calls = %d, want 0 (no record on publish error)", len(store.calls))
 	}
 }
 

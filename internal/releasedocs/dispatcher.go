@@ -13,6 +13,22 @@ import (
 	"github.com/payamqorbanpour/cadoo/internal/vcs"
 )
 
+// PostedStore is the persistence interface used by Dispatcher to record
+// successful publish events for cross-restart idempotency (D-14,
+// REQ-release-docs-idempotency). The interface is deliberately narrow —
+// it matches only the Record method on internal/releasedocs/state.Store — so
+// the releasedocs package does not import the state sub-package and there is
+// no import cycle. A nil PostedStore is safe: the dispatcher skips Record
+// calls entirely (stateless marker mode).
+//
+// *state.Store satisfies this interface. Tests may use a recording fake.
+type PostedStore interface {
+	// Record upserts a publication record keyed on (provider, repoFullName,
+	// toTag, kind). org is stored for multi-tenancy. externalID is the
+	// provider-specific reference (e.g. the tag name) for this publication.
+	Record(ctx context.Context, org, provider, repoFullName, toTag, kind, externalID string) error
+}
+
 // Dispatcher is the single entry point for a release-docs run. It resolves the
 // VCS provider, loads the per-repo config from the release tag tree, builds the
 // ReleaseContext, runs every enabled Generator, and routes the resulting
@@ -37,6 +53,11 @@ type Dispatcher struct {
 	// Publishers is the ordered slice of Publisher implementations to invoke.
 	// Publishers that lack a required VCS capability degrade gracefully (D-15).
 	Publishers []Publisher
+	// Store is the optional PostedStore used to record successful publish
+	// events for cross-restart idempotency (REQ-release-docs-idempotency).
+	// When nil, no Record calls are made and the dispatcher runs in stateless
+	// marker mode — identical to cadoo-cli behaviour (D-14).
+	Store PostedStore
 }
 
 // Run executes a single release-docs job: provider resolution → config load
@@ -99,6 +120,26 @@ func (d *Dispatcher) Run(ctx context.Context, job ReleaseJob) error {
 	for _, pub := range d.Publishers {
 		if err := pub.Publish(ctx, rc, arts); err != nil {
 			return fmt.Errorf("releasedocs: publisher %s: %w", pub.Target(), err)
+		}
+	}
+
+	// Record publish state for each produced artifact when a Store is
+	// configured. This runs only after all publishers succeed (no Record on
+	// error). Record errors are logged as warnings but do not fail the run —
+	// idempotency bookkeeping is best-effort; the publish already succeeded.
+	if d.Store != nil {
+		for _, art := range arts {
+			if err := d.Store.Record(ctx,
+				job.Org,
+				string(job.Provider),
+				job.Repo,
+				job.ToRef,
+				string(art.Kind),
+				job.ToRef, // externalID is the tag for this plan
+			); err != nil {
+				slog.Warn("releasedocs: state record failed (best-effort)",
+					"kind", art.Kind, "repo", job.Repo, "toRef", job.ToRef, "err", err)
+			}
 		}
 	}
 
