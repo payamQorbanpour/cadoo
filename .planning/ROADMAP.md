@@ -112,7 +112,7 @@ Plans:
 
 **Wave 2** *(blocked on 03-01)*
 
-- [ ] 03-02-PLAN.md — Wave 0 test scaffold: fixtures (v2/v3/v31/invalid/remote-ref/oversized), fakeFetcher, table-driven stubs for D-01..D-10 + security, pages apidocs path/idempotency tests
+- [x] 03-02-PLAN.md — Wave 0 test scaffold: fixtures (v2/v3/v31/invalid/remote-ref/oversized), fakeFetcher, table-driven stubs for D-01..D-10 + security, pages apidocs path/idempotency tests
 
 **Wave 3** *(blocked on 03-02)*
 
@@ -135,4 +135,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Generators + Publishers + CLI | 7/7 | Complete   | 2026-06-05 |
 | 2. Webhook Auto-Trigger + State | 6/6 | Complete   | 2026-06-05 |
-| 3. API Docs / OpenAPI | 1/5 | In Progress|  |
+| 3. API Docs / OpenAPI | 2/5 | In Progress|  |
