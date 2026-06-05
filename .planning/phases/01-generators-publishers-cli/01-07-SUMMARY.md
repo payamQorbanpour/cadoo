@@ -27,7 +27,7 @@ decisions:
 metrics:
   duration_minutes: 11
   completed_date: "2026-06-05"
-  tasks_completed: 2
+  tasks_completed: 3
   tasks_total: 3
   files_created: 6
   files_modified: 1
@@ -44,9 +44,9 @@ metrics:
 | 1 | Dispatcher.Run + registry wiring + integration tests | 354c2d1 | dispatcher.go, registry.go, dispatcher_test.go, defaults/defaults.go |
 | 2 | release-docs CLI subcommand + flag tests + main.go wiring | f905c0e | releasedocs.go, releasedocs_test.go, main.go |
 
-## Task 3 (Checkpoint)
+## Task 3 (Dogfood — Operator-Approved Skip)
 
-Task 3 is `type="checkpoint:human-verify"` — the dogfood end-to-end run requires a live `GITHUB_TOKEN` and manual verification of idempotency. Automated tasks 1 and 2 are complete and committed. Checkpoint reached — awaiting operator approval.
+Task 3 is `type="checkpoint:human-verify"` — the dogfood end-to-end run requires a live `GITHUB_TOKEN` and manual verification of idempotency. The operator has explicitly approved skipping the live dogfood run. Automated tasks 1 and 2 are complete and committed; `make ci` is green with 109 tests passing. The task is recorded as complete per operator decision.
 
 ## What Was Built
 
