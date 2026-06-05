@@ -154,10 +154,10 @@ func TestReleaseBodyDegrades(t *testing.T) {
 // vcs.TagReleasePublisher so the CR-01 fix path is exercised.
 type gitLabStyleProvider struct {
 	minimalProvider
-	release               vcs.Release
-	updateByTagCalls      int
-	capturedTag           string
-	capturedBody          string
+	release                vcs.Release
+	updateByTagCalls       int
+	capturedTag            string
+	capturedBody           string
 	updateReleaseBodyCalls int
 }
 

@@ -78,6 +78,10 @@ type ReleaseArtifacts struct {
 	Changelog ArtifactConfig `yaml:"changelog"`
 	// ReleaseNotes configures the LLM-polished release narrative artifact.
 	ReleaseNotes ReleaseNotesConfig `yaml:"releaseNotes"`
+	// Blog configures the long-form release announcement artifact (blog post).
+	// When Enabled, the blog generator produces a publication-ready post from the
+	// release context and any configured template. Wired in Phase 2 plan 03.
+	Blog ArtifactConfig `yaml:"blog"`
 }
 
 // ArtifactConfig holds the common per-artifact settings shared by changelog
@@ -130,15 +134,30 @@ type ReleasePublish struct {
 	// ChangelogPR configures publishing the changelog section via a single
 	// deduplicated pull-request to CHANGELOG.md.
 	ChangelogPR PublishTarget `yaml:"changelogPR"`
-	// Pages configures publishing to a docs branch or GitHub Pages site.
-	// Wired in Phase 2. Present here for forward-compatible schema parsing.
-	Pages PublishTarget `yaml:"pages"`
+	// Pages configures publishing to a docs branch or GitHub/GitLab Pages site,
+	// including branch and directory targeting. Wired in Phase 2 plan 04.
+	Pages PagesPublishTarget `yaml:"pages"`
 }
 
 // PublishTarget holds the per-destination publish settings.
 type PublishTarget struct {
 	// Enabled controls whether this publish destination is active.
 	Enabled bool `yaml:"enabled"`
+}
+
+// PagesPublishTarget configures publishing to a docs branch or GitHub/GitLab
+// Pages site. It extends the basic enabled flag with branch and directory
+// targeting so the pages publisher knows where to write generated artifacts.
+type PagesPublishTarget struct {
+	// Enabled controls whether the pages publish destination is active.
+	Enabled bool `yaml:"enabled"`
+	// Branch is the VCS branch used for the pages site (e.g. "gh-pages").
+	// Empty defaults to "gh-pages", applied by the pages publisher.
+	Branch string `yaml:"branch"`
+	// Dir is the repository-relative directory within Branch where artifacts
+	// are written (e.g. "docs"). Empty defaults to "docs", applied by the
+	// pages publisher.
+	Dir string `yaml:"dir"`
 }
 
 // PromptCustomization lets users override or extend a tool's system prompt.
