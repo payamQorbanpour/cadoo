@@ -82,6 +82,10 @@ type ReleaseArtifacts struct {
 	// When Enabled, the blog generator produces a publication-ready post from the
 	// release context and any configured template. Wired in Phase 2 plan 03.
 	Blog ArtifactConfig `yaml:"blog"`
+	// APIDocs configures the API documentation artifact family (raw spec + Redoc
+	// HTML + Markdown reference). All three outputs are gated together by a
+	// single enabled + when: condition (D-07). Wired in Phase 3 plan 03.
+	APIDocs APIDocsConfig `yaml:"apiDocs"`
 }
 
 // ArtifactConfig holds the common per-artifact settings shared by changelog
@@ -109,6 +113,22 @@ type ReleaseNotesConfig struct {
 	// Tone shapes the LLM's writing style for the release narrative.
 	// Accepted values: "concise" (default), "detailed", "marketing".
 	Tone string `yaml:"tone"`
+}
+
+// APIDocsConfig extends ArtifactConfig with apidocs-specific settings. It
+// mirrors the ReleaseNotesConfig inline-embed + extra-field pattern.
+// All three apidocs outputs (raw spec, Redoc HTML, Markdown reference) are
+// gated together by a single enabled + when: condition (D-07). The default
+// when: is "always" (D-08).
+type APIDocsConfig struct {
+	ArtifactConfig `yaml:",inline"`
+	// SpecPath is the repository-relative path to the committed OpenAPI/Swagger
+	// spec file. When empty, the apidocs generator uses the conventional
+	// fallback discovery list (D-02):
+	//   openapi.yaml → openapi.yml → openapi.json → docs/openapi.yaml → api/openapi.yaml
+	// The file is read at rc.ToRef (the release tag), never from the default
+	// branch (consistent with the "config from head" rule).
+	SpecPath string `yaml:"specPath"`
 }
 
 // ReleaseGrouping controls how commits and merged PRs are classified into
