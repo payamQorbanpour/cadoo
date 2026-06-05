@@ -367,11 +367,11 @@ func (p Publisher) Publish(ctx context.Context, rc releasedocs.ReleaseContext, a
     }
     for _, art := range arts {
         // Only route artifacts targeted at pages
-        path := fmt.Sprintf("%s/releases/%s/%s.md", dir, rc.ToRef, art.Kind)
+        filePath := path.Join(dir, "releases", rc.ToRef, string(art.Kind)+".md")
         if err := bc.UpsertFile(ctx, rc.Repo, branch,
             fmt.Sprintf("docs: release %s %s", rc.ToRef, art.Kind),
-            vcs.FileWrite{Path: path, Content: art.Content}); err != nil {
-            return fmt.Errorf("pages: upsert %s: %w", path, err)
+            vcs.FileWrite{Path: filePath, Content: art.Content}); err != nil {
+            return fmt.Errorf("pages: upsert %s: %w", filePath, err)
         }
     }
     return nil
@@ -554,22 +554,25 @@ q.Register(releasedocs.ReleaseJob{}.Kind(), releaseHandlerFunc(releaseDispatcher
 
 **Note on A1:** The go-gitlab source at `event_webhook_types.go:1119` shows `Action string \`json:"action"\`` but does not enumerate valid values in the struct definition. The constant `"create"` is inferred from GitLab's webhook documentation pattern. Confirm against a real GitLab webhook delivery in integration testing.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Blog generator: does it need its own `Target` routing or does it always go to pages?**
    - What we know: The SPEC says "blog is routed to pages." The pages publisher receives all artifacts and commits them; it could filter by kind.
    - What's unclear: Whether the blog should also optionally go to `releaseBody` (seems unlikely) or be pages-only.
    - Recommendation: Pages-only for blog. The pages publisher commits all non-empty artifacts it receives; artifact routing is controlled by which publishers are in the dispatcher's `Publishers` slice.
+   - RESOLVED: Pages-only. The pages publisher commits all non-empty artifacts; the dispatcher routes `KindBlog` to the pages publisher only. Implemented in plan 02-04 (pages publisher) and plan 02-03 (blog generator).
 
 2. **StateStore: should it mirror findings.Store with a DB + in-memory dual backend?**
    - What we know: The SPEC says "in stateless CLI/CI mode, reconstruct state by reading Cadoo's own markers back." The Phase 1 CLI already does marker-based reconstruction.
    - What's unclear: Whether the StateStore needs an in-memory fallback or can simply be nil-tolerant (same as finding `Posted`).
    - Recommendation: Nil-tolerant store (nil means stateless mode). For DB-backed mode, implement `StateStore` with `pgxpool`. The webhook binary (which has DB access in River mode) passes the store; the CLI dispatcher does not.
+   - RESOLVED: Nil-tolerant only. A nil `Store` field on `releasedocs.Dispatcher` is the stateless-marker-mode fallback; no in-memory backend is needed. DB-backed `state.Store` wired in plan 02-06 when `DATABASE_URL` is set.
 
 3. **CR-01 fix placement: publisher or adapter?**
    - What we know: `releasebody.Publisher.Publish` calls `rp.UpdateReleaseBody(ctx, repo, rel.ID, body)` which hard-errors for GitLab.
    - What's unclear: Whether to fix in the publisher (type-assert `*gitlab.Adapter`) or add a new optional interface `TagReleasePublisher` that the publisher checks.
    - Recommendation: Add `TagReleasePublisher interface { UpdateReleaseBodyByTag(ctx, repo, tag, body) error }` to `internal/vcs/vcs.go`. The publisher checks for it first (for zero-ID releases), falling back to the numeric ID path. This keeps the publisher from importing `*gitlab.Adapter` directly.
+   - RESOLVED: Optional `vcs.TagReleasePublisher` interface added in plan 02-01 Task 1. The `releasebody.Publisher` type-asserts `TagReleasePublisher` first; for zero-ID releases (GitLab) it calls `UpdateReleaseBodyByTag`. No `*gitlab.Adapter` import in the publisher sub-package.
 
 ## Environment Availability
 
