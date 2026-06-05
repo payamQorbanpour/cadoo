@@ -82,3 +82,53 @@ ast_grep:
 # Knowledge base — repos to ingest as cross-references
 kb:
   cross_repos: []
+
+# Release-docs subsystem — automated release artifacts generated on tag/release events.
+# All artifacts are committed to a docs branch (pages.branch) and/or the VCS release body.
+releaseDocs:
+  enabled: false          # master switch; set to true to enable release-docs generation
+  trigger: release        # "release" (VCS release event) or "tag" (tag push)
+  tagPattern: "v*"        # glob matched against tag names; empty = "v*"
+
+  artifacts:
+    changelog:
+      enabled: true
+      when: always         # always | major | minor_or_above | patch_or_above | major | patch
+
+    releaseNotes:
+      enabled: true
+      when: always
+      tone: concise        # concise (default) | detailed | marketing
+
+    blog:
+      enabled: true
+      when: minor_or_above # blog posts are meaningful for feature/major releases
+
+    # API docs artifact family — fetches a committed OpenAPI/Swagger spec, validates
+    # it, and emits three artifacts: the raw spec (openapi.yaml), a self-contained
+    # offline Redoc HTML reference (api-reference.html), and a deterministic Markdown
+    # reference (api-reference.md). All three outputs are gated by the single
+    # enabled + when: condition below (D-07).
+    #
+    # Failure modes (no spec found, parse error, validation error, unsupported version)
+    # are graceful: the generator skips all three artifacts and logs the reason;
+    # changelog, release-notes, and blog are unaffected (D-10).
+    apiDocs:
+      enabled: false
+      when: always          # default is "always" — runs on every release (D-08)
+      specPath: ""          # repository-relative path to the committed OpenAPI/Swagger spec.
+                            # When empty, the generator tries the conventional fallback list (D-02):
+                            #   openapi.yaml → openapi.yml → openapi.json →
+                            #   docs/openapi.yaml → api/openapi.yaml
+                            # Set to a specific path (e.g. "docs/api/openapi.yaml") to skip
+                            # fallback discovery and fetch exactly that file at the release tag.
+
+  publish:
+    releaseBody:
+      enabled: false
+    changelogPR:
+      enabled: false
+    pages:
+      enabled: false
+      branch: gh-pages      # docs branch to commit release artifacts to
+      dir: docs             # base directory within the branch

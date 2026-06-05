@@ -55,9 +55,9 @@ func TestPublish_APIDocs_Paths(t *testing.T) {
 	}
 
 	wantPaths := map[string]bool{
-		"docs/releases/v2.0.0/openapi.yaml":        false,
-		"docs/releases/v2.0.0/api-reference.html":  false,
-		"docs/releases/v2.0.0/api-reference.md":    false,
+		"docs/releases/v2.0.0/openapi.yaml":       false,
+		"docs/releases/v2.0.0/api-reference.html": false,
+		"docs/releases/v2.0.0/api-reference.md":   false,
 	}
 	for _, f := range fake.CapturedFiles {
 		if _, ok := wantPaths[f.Path]; !ok {

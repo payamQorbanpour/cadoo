@@ -11,11 +11,11 @@ import (
 	"strings"
 
 	"github.com/pb33f/libopenapi"
+	libopenapiv "github.com/pb33f/libopenapi-validator"
 	"github.com/pb33f/libopenapi/datamodel"
 	v2high "github.com/pb33f/libopenapi/datamodel/high/v2"
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/utils"
-	libopenapiv "github.com/pb33f/libopenapi-validator"
 )
 
 // maxSpecSize is the maximum raw byte length accepted before parsing (T-03-04 OOM guard).
