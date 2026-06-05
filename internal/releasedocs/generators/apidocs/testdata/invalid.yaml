@@ -1,0 +1,6 @@
+this is: not: valid: yaml: at: all
+  - because: [it has
+    unclosed: brackets and
+  bad indentation
+  : "mixed" : colon : styles
+{broken: json style {inside yaml}
