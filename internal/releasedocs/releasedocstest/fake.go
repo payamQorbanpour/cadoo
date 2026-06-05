@@ -65,8 +65,12 @@ type Fake struct {
 	Release *vcs.Release
 	// PRNumber is returned by OpenOrUpdatePR.
 	PRNumber int64
-	// FileContent is returned by FetchFileFromRef.
+	// FileContent is returned by FetchFileFromRef when FetchErr is nil.
 	FileContent []byte
+	// FetchErr, when non-nil, is returned as the error from FetchFileFromRef
+	// instead of FileContent. Use this to simulate missing-file (404) or other
+	// fetch failures in tests.
+	FetchErr error
 }
 
 // options holds the capability omission flags for NewFake.
@@ -275,6 +279,9 @@ func (f *Fake) OpenOrUpdatePR(_ context.Context, _, branch, _, _, body string) (
 // FetchFileFromRef implements releasedocs.FileFetcher.
 func (f *Fake) FetchFileFromRef(_ context.Context, _, _, _ string) ([]byte, error) {
 	f.FetchFileFromRefCalls++
+	if f.FetchErr != nil {
+		return nil, f.FetchErr
+	}
 	return f.FileContent, nil
 }
 

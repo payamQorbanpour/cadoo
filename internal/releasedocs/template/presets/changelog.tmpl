@@ -1,0 +1,9 @@
+## [{{ .ToRef }}]{{ if .FromRef }} — {{ .FromRef }} → {{ .ToRef }}{{ end }}
+
+{{ range .Groups -}}
+### {{ .Title }}
+
+{{ range .Items -}}
+- {{ if .PR }}[#{{ .PR.Number }}]({{ .PR.URL }}) {{ end }}{{ .Summary }}{{ if .Author }} ({{ .Author }}){{ end }}
+{{ end }}
+{{ end -}}
