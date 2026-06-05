@@ -1,0 +1,18 @@
+# API Reference — {{ .Title }} {{ .Version }}
+
+{{ range .Operations -}}
+## {{ .Method }} {{ .Path }}
+
+{{ if .Summary }}**{{ .Summary }}**
+{{ end -}}
+{{ if .Description }}
+{{ .Description }}
+{{ end -}}
+{{ if .Parameters -}}
+| Parameter | In |
+|-----------|-----|
+{{ range .Parameters -}}
+| {{ .Name }} | {{ .In }} |
+{{ end -}}
+{{ end }}
+{{ end -}}

@@ -97,13 +97,18 @@ func (g *Generator) GenerateMulti(ctx context.Context, rc releasedocs.ReleaseCon
 		Content:  htmlBytes,
 	}
 
-	// Artifact 3: deterministic Markdown reference (D-06) — TODO(03-04-T2): implement renderMarkdown.
+	// Artifact 3: deterministic Markdown reference (D-06).
+	mdBytes, err := renderMarkdown(model)
+	if err != nil {
+		slog.Warn("apidocs: skipping Markdown — renderMarkdown failed",
+			"repo", rc.Repo, "toRef", rc.ToRef, "err", err)
+		mdBytes = []byte{}
+	}
 	mdRef := releasedocs.Artifact{
 		Kind:     releasedocs.KindAPIDocs,
 		Filename: "api-reference.md",
-		Content:  []byte{}, // TODO(03-04-T2): fill in with renderMarkdown result
+		Content:  mdBytes,
 	}
-	_ = model // used by renderMarkdown in Task 2
 
 	return []releasedocs.Artifact{rawSpec, redocHTML, mdRef}, nil
 }
