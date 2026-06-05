@@ -1,0 +1,6 @@
+## {{ .ToRef }}
+
+{{ range .Groups -}}
+**{{ .Title }}:** {{ range $i, $item := .Items }}{{ if $i }}, {{ end }}{{ $item.Summary }}{{ end }}
+
+{{ end -}}

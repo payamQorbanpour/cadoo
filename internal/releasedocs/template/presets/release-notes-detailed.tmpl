@@ -1,0 +1,9 @@
+## {{ .ToRef }} Release Notes
+
+{{ range .Groups -}}
+### {{ .Title }}
+
+{{ range .Items -}}
+- **{{ .Summary }}**{{ if .PR }} ([#{{ .PR.Number }}]({{ .PR.URL }})){{ end }}{{ if .Author }} by {{ .Author }}{{ end }}
+{{ end }}
+{{ end -}}
