@@ -48,11 +48,11 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-05-PLAN.md — Generators: deterministic-first changelog (golden-file) + release-notes (skeleton + tone narrative) (TDD)
+- [x] 01-05-PLAN.md — Generators: deterministic-first changelog (golden-file) + release-notes (skeleton + tone narrative) (TDD)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 01-06-PLAN.md — Publishers: releasebody marker upsert + changelogpr single marker-keyed PR (idempotent, TDD)
+- [x] 01-06-PLAN.md — Publishers: releasebody marker upsert + changelogpr single marker-keyed PR (idempotent, TDD)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -101,6 +101,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Generators + Publishers + CLI | 4/7 | In Progress|  |
+| 1. Generators + Publishers + CLI | 6/7 | In Progress|  |
 | 2. Webhook Auto-Trigger + State | 0/TBD | Not started | - |
 | 3. API Docs / OpenAPI | 0/TBD | Not started | - |
