@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/payamqorbanpour/cadoo/internal/config"
-	"github.com/payamqorbanpour/cadoo/internal/llm"
 	"github.com/payamqorbanpour/cadoo/internal/releasedocs"
 	"github.com/payamqorbanpour/cadoo/internal/releasedocs/generators/changelog"
 	"github.com/payamqorbanpour/cadoo/internal/vcs"
@@ -146,19 +145,6 @@ func TestChangelogEnabled(t *testing.T) {
 			}
 		})
 	}
-}
-
-// stubLLM is a minimal llm.Provider test double that records calls and returns
-// a canned response. Used to verify that with a nil LLM no Chat is attempted.
-type stubLLM struct {
-	calls int
-	resp  string
-}
-
-// Chat implements llm.Provider.
-func (s *stubLLM) Chat(_ context.Context, req llm.ChatRequest) (*llm.ChatResponse, error) {
-	s.calls++
-	return &llm.ChatResponse{Content: s.resp}, nil
 }
 
 // TestChangelogLLMPolishSkipped verifies that with a nil LLM, Generate never

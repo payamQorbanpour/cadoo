@@ -1,1 +1,18 @@
-placeholder
+## [v1.1.0] — v1.0.0 → v1.1.0
+
+### Breaking Changes
+
+- Drop legacy API (alice)
+
+### Features
+
+- Add dark mode support (bob)
+
+### Bug Fixes
+
+- Correct timezone handling in scheduler (carol)
+
+### Performance
+
+- Reduce DB round-trips in listing query (dave)
+
