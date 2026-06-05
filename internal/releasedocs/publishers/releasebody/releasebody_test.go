@@ -149,6 +149,194 @@ func TestReleaseBodyDegrades(t *testing.T) {
 	// without panicking (the minimalProvider has no UpdateReleaseBody to call).
 }
 
+// gitLabStyleProvider is a test double that behaves like GitLab: GetReleaseByTag
+// returns a Release with ID=0 and TagName set, and the provider also implements
+// vcs.TagReleasePublisher so the CR-01 fix path is exercised.
+type gitLabStyleProvider struct {
+	minimalProvider
+	release                vcs.Release
+	updateByTagCalls       int
+	capturedTag            string
+	capturedBody           string
+	updateReleaseBodyCalls int
+}
+
+func (g *gitLabStyleProvider) GetReleaseByTag(_ context.Context, _, _ string) (*vcs.Release, error) {
+	return &g.release, nil
+}
+
+func (g *gitLabStyleProvider) UpdateReleaseBody(_ context.Context, _ string, _ int64, _ string) error {
+	g.updateReleaseBodyCalls++
+	return nil
+}
+
+func (g *gitLabStyleProvider) UpdateReleaseBodyByTag(_ context.Context, _, tag, body string) error {
+	g.updateByTagCalls++
+	g.capturedTag = tag
+	g.capturedBody = body
+	return nil
+}
+
+var _ vcs.ReleasePublisher = (*gitLabStyleProvider)(nil)
+var _ vcs.TagReleasePublisher = (*gitLabStyleProvider)(nil)
+
+// noTagPublisherProvider implements ReleasePublisher returning ID=0 but does NOT
+// implement TagReleasePublisher. Used to test the fallback-error path.
+type noTagPublisherProvider struct {
+	minimalProvider
+	release vcs.Release
+}
+
+func (n *noTagPublisherProvider) GetReleaseByTag(_ context.Context, _, _ string) (*vcs.Release, error) {
+	return &n.release, nil
+}
+
+func (n *noTagPublisherProvider) UpdateReleaseBody(_ context.Context, _ string, _ int64, _ string) error {
+	return nil
+}
+
+var _ vcs.ReleasePublisher = (*noTagPublisherProvider)(nil)
+
+// TestGitHubPath verifies that when the provider returns a release with a non-zero
+// numeric ID, Publish routes through UpdateReleaseBody (the existing numeric-ID
+// path) and does not call UpdateReleaseBodyByTag.
+func TestGitHubPath(t *testing.T) {
+	t.Parallel()
+
+	fake, provider := releasedocstest.NewFake()
+	fake.Release = &vcs.Release{
+		ID:      42,
+		TagName: "v2.0.0",
+		Body:    "",
+	}
+
+	rc := releasedocs.ReleaseContext{
+		Repo:     "owner/repo",
+		Org:      "org1",
+		ToRef:    "v2.0.0",
+		Provider: provider,
+	}
+	arts := []releasedocs.Artifact{
+		{Kind: releasedocs.KindReleaseNotes, Content: []byte("## Notes\nContent.")},
+	}
+
+	p := releasebody.Publisher{}
+	if err := p.Publish(context.Background(), rc, arts); err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+	if fake.UpdateReleaseBodyCalls != 1 {
+		t.Errorf("UpdateReleaseBody calls = %d; want 1", fake.UpdateReleaseBodyCalls)
+	}
+}
+
+// TestGitLabPath verifies that when the provider returns a release with ID=0 and
+// TagName != "" and implements vcs.TagReleasePublisher, Publish routes through
+// UpdateReleaseBodyByTag with the release's tag name (CR-01 fix).
+func TestGitLabPath(t *testing.T) {
+	t.Parallel()
+
+	prov := &gitLabStyleProvider{
+		release: vcs.Release{
+			ID:      0,
+			TagName: "v3.1.0",
+			Body:    "",
+		},
+	}
+
+	rc := releasedocs.ReleaseContext{
+		Repo:     "owner/repo",
+		Org:      "org1",
+		ToRef:    "v3.1.0",
+		Provider: prov,
+	}
+	arts := []releasedocs.Artifact{
+		{Kind: releasedocs.KindReleaseNotes, Content: []byte("## Release Notes\nContent.")},
+	}
+
+	p := releasebody.Publisher{}
+	if err := p.Publish(context.Background(), rc, arts); err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+	// Must have called UpdateReleaseBodyByTag, not UpdateReleaseBody.
+	if prov.updateByTagCalls != 1 {
+		t.Errorf("UpdateReleaseBodyByTag calls = %d; want 1", prov.updateByTagCalls)
+	}
+	if prov.updateReleaseBodyCalls != 0 {
+		t.Errorf("UpdateReleaseBody calls = %d; want 0 (should use tag path)", prov.updateReleaseBodyCalls)
+	}
+	if prov.capturedTag != "v3.1.0" {
+		t.Errorf("capturedTag = %q; want %q", prov.capturedTag, "v3.1.0")
+	}
+}
+
+// TestFallbackError verifies that when the provider returns a release with ID=0
+// but does NOT implement vcs.TagReleasePublisher, Publish returns a non-nil error
+// naming the missing capability.
+func TestFallbackError(t *testing.T) {
+	t.Parallel()
+
+	prov := &noTagPublisherProvider{
+		release: vcs.Release{
+			ID:      0,
+			TagName: "v4.0.0",
+			Body:    "",
+		},
+	}
+
+	rc := releasedocs.ReleaseContext{
+		Repo:     "owner/repo",
+		Org:      "org1",
+		ToRef:    "v4.0.0",
+		Provider: prov,
+	}
+	arts := []releasedocs.Artifact{
+		{Kind: releasedocs.KindReleaseNotes, Content: []byte("## Notes\nContent.")},
+	}
+
+	p := releasebody.Publisher{}
+	err := p.Publish(context.Background(), rc, arts)
+	if err == nil {
+		t.Fatal("Publish: expected non-nil error for zero-ID release without TagReleasePublisher; got nil")
+	}
+}
+
+// TestNoOp verifies that when the spliced body is identical to the current body,
+// neither UpdateReleaseBody nor UpdateReleaseBodyByTag is called.
+func TestNoOp(t *testing.T) {
+	t.Parallel()
+
+	// Use the Fake to easily control what GetReleaseByTag returns.
+	fake, provider := releasedocstest.NewFake()
+
+	arts := []releasedocs.Artifact{
+		{Kind: releasedocs.KindReleaseNotes, Content: []byte("## Notes\nContent.")},
+	}
+
+	// Build the body that would result from a first publish, so the second call is a no-op.
+	// We compute the expected spliced body using releasedocs.SpliceReleaseBody.
+	preSplicedBody := releasedocs.SpliceReleaseBody("", "## Notes\nContent.")
+	fake.Release = &vcs.Release{
+		ID:      5,
+		TagName: "v1.0.0",
+		Body:    preSplicedBody,
+	}
+
+	rc := releasedocs.ReleaseContext{
+		Repo:     "owner/repo",
+		Org:      "org1",
+		ToRef:    "v1.0.0",
+		Provider: provider,
+	}
+
+	p := releasebody.Publisher{}
+	if err := p.Publish(context.Background(), rc, arts); err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+	if fake.UpdateReleaseBodyCalls != 0 {
+		t.Errorf("UpdateReleaseBody calls = %d; want 0 (body unchanged, no-op expected)", fake.UpdateReleaseBodyCalls)
+	}
+}
+
 // --- helpers ---
 
 func contains(s, sub string) bool {

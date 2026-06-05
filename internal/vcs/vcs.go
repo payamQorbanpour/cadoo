@@ -239,6 +239,19 @@ type ReleasePublisher interface {
 	UpdateReleaseBody(ctx context.Context, repo string, releaseID int64, body string) error
 }
 
+// TagReleasePublisher is an OPTIONAL capability. Adapters whose releases are
+// identified by tag name rather than a numeric ID (e.g. GitLab) implement this
+// interface so the releasebody publisher can update a release without a numeric
+// ID. The releasebody publisher type-asserts for it when rel.ID == 0 and falls
+// back to the numeric-ID ReleasePublisher path when the assertion fails.
+// Providers that do not implement this interface but do implement ReleasePublisher
+// continue to work through the numeric-ID path unchanged.
+type TagReleasePublisher interface {
+	// UpdateReleaseBodyByTag replaces the body field of the release identified
+	// by tag. Other release fields (draft, prerelease) are left unchanged.
+	UpdateReleaseBodyByTag(ctx context.Context, repo, tag, body string) error
+}
+
 // BranchCommitter is an OPTIONAL capability. Adapters that can create or
 // update files on a branch and manage pull-requests implement this interface
 // so the changelog-PR publisher can operate without knowing the underlying

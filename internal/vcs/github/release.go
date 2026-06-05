@@ -184,6 +184,20 @@ func (a *Adapter) UpdateReleaseBody(ctx context.Context, repo string, releaseID 
 	return nil
 }
 
+// UpdateReleaseBodyByTag replaces the body field of the release identified by
+// tag. It resolves the release by tag (via GetReleaseByTag) and then calls the
+// GitHub Repositories.EditRelease API with the numeric release ID, so the path
+// is equivalent to UpdateReleaseBody but driven from a tag name. This allows
+// the releasebody publisher to use a uniform TagReleasePublisher type-assertion
+// across all providers without special-casing GitHub.
+func (a *Adapter) UpdateReleaseBodyByTag(ctx context.Context, repo, tag, body string) error {
+	rel, err := a.GetReleaseByTag(ctx, repo, tag)
+	if err != nil {
+		return err
+	}
+	return a.UpdateReleaseBody(ctx, repo, rel.ID, body)
+}
+
 // UpsertFile creates or updates a single file on the named branch. If the
 // branch does not exist it is created from the default branch HEAD. commitMessage
 // is used as the VCS commit message.
@@ -294,8 +308,9 @@ func (a *Adapter) OpenOrUpdatePR(ctx context.Context, repo, branch, base, title,
 	return int64(created.GetNumber()), nil
 }
 
-// Compile-time assertions: *Adapter must satisfy the three optional capability
+// Compile-time assertions: *Adapter must satisfy the optional capability
 // interfaces declared in internal/vcs/vcs.go.
 var _ vcs.ReleaseRangeReader = (*Adapter)(nil)
 var _ vcs.ReleasePublisher = (*Adapter)(nil)
+var _ vcs.TagReleasePublisher = (*Adapter)(nil)
 var _ vcs.BranchCommitter = (*Adapter)(nil)

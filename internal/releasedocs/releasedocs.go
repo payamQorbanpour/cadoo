@@ -22,6 +22,10 @@ const (
 	KindChangelog ArtifactKind = "changelog"
 	// KindReleaseNotes identifies a human-readable LLM-polished release narrative.
 	KindReleaseNotes ArtifactKind = "release_notes"
+	// KindBlog identifies a long-form release announcement artifact (blog post).
+	// The blog generator (Phase 2 plan 03) produces this kind from the release
+	// context and any configured template.
+	KindBlog ArtifactKind = "blog"
 )
 
 // PublishTarget identifies where a publisher delivers artifacts.
@@ -35,6 +39,9 @@ const (
 	// TargetChangelogPR delivers artifact content by opening or updating a
 	// pull-request that writes CHANGELOG.md.
 	TargetChangelogPR PublishTarget = "changelog_pr"
+	// TargetPages delivers artifact content to a docs branch or GitHub/GitLab
+	// Pages site. The pages publisher (Phase 2 plan 04) implements this target.
+	TargetPages PublishTarget = "pages"
 )
 
 // SemverBump classifies the magnitude of a release version increment.
