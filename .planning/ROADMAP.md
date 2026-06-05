@@ -42,9 +42,9 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — ReleaseContext builder + grouped change model (conventional/labels), semver bump, Enabled gate (TDD)
-- [ ] 01-03-PLAN.md — Template subsystem: go:embed presets + tag-tree override loader (text/template)
-- [ ] 01-04-PLAN.md — VCS adapter capabilities (GitHub + GitLab): range read, release publish, branch-commit
+- [x] 01-02-PLAN.md — ReleaseContext builder + grouped change model (conventional/labels), semver bump, Enabled gate (TDD)
+- [x] 01-03-PLAN.md — Template subsystem: go:embed presets + tag-tree override loader (text/template)
+- [x] 01-04-PLAN.md — VCS adapter capabilities (GitHub + GitLab): range read, release publish, branch-commit
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -101,6 +101,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Generators + Publishers + CLI | 1/7 | In Progress|  |
+| 1. Generators + Publishers + CLI | 4/7 | In Progress|  |
 | 2. Webhook Auto-Trigger + State | 0/TBD | Not started | - |
 | 3. API Docs / OpenAPI | 0/TBD | Not started | - |
