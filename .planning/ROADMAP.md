@@ -116,7 +116,7 @@ Plans:
 
 **Wave 3** *(blocked on 03-02)*
 
-- [ ] 03-03-PLAN.md — Spec ingestion: discover.go (fallback + 404 tolerance) + parse.go (libopenapi, version detect, validation, $ref-SSRF + 5MB-OOM guards, Swagger 2.0 isolation)
+- [x] 03-03-PLAN.md — Spec ingestion: discover.go (fallback + 404 tolerance) + parse.go (libopenapi, version detect, validation, $ref-SSRF + 5MB-OOM guards, Swagger 2.0 isolation)
 
 **Wave 4** *(blocked on 03-03)*
 
@@ -135,4 +135,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Generators + Publishers + CLI | 7/7 | Complete   | 2026-06-05 |
 | 2. Webhook Auto-Trigger + State | 6/6 | Complete   | 2026-06-05 |
-| 3. API Docs / OpenAPI | 2/5 | In Progress|  |
+| 3. API Docs / OpenAPI | 3/5 | In Progress|  |
