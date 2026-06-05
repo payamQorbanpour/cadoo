@@ -43,6 +43,102 @@ type Repo struct {
 	// noise-averse: silent on clean, skip nit-only runs, require at least
 	// one finding to post anything.
 	CommentPolicy CommentPolicy `yaml:"comment_policy"`
+
+	// ReleaseDocs configures the automated release-artifact generation and
+	// publishing subsystem. Loaded from the release tag's tree (never from
+	// main — consistent with the existing "config from head" rule).
+	ReleaseDocs ReleaseDocs `yaml:"releaseDocs"`
+}
+
+// ReleaseDocs is the top-level release-docs configuration block in
+// .cadoo.yaml. All fields are optional; zero values disable the feature.
+type ReleaseDocs struct {
+	// Enabled is the master switch for the release-docs subsystem.
+	// When false (the default), no artifacts are generated or published.
+	Enabled bool `yaml:"enabled"`
+	// Trigger controls what event activates release-docs generation.
+	// Accepted values: "release" (VCS release event, default), "tag"
+	// (tag push). Manual CLI invocation always runs regardless of this field.
+	Trigger string `yaml:"trigger"`
+	// TagPattern is a glob matched against VCS tag names to decide which tags
+	// trigger release-docs generation (e.g. "v*"). Empty means "v*".
+	TagPattern string `yaml:"tagPattern"`
+	// Artifacts configures per-artifact enabled + condition settings.
+	Artifacts ReleaseArtifacts `yaml:"artifacts"`
+	// Grouping controls how commits and merged PRs are classified into
+	// changelog sections.
+	Grouping ReleaseGrouping `yaml:"grouping"`
+	// Publish controls which publish destinations are active.
+	Publish ReleasePublish `yaml:"publish"`
+}
+
+// ReleaseArtifacts groups the per-artifact configuration entries.
+type ReleaseArtifacts struct {
+	// Changelog configures the machine-formatted CHANGELOG.md-style artifact.
+	Changelog ArtifactConfig `yaml:"changelog"`
+	// ReleaseNotes configures the LLM-polished release narrative artifact.
+	ReleaseNotes ReleaseNotesConfig `yaml:"releaseNotes"`
+}
+
+// ArtifactConfig holds the common per-artifact settings shared by changelog
+// and (as the base) release-notes.
+type ArtifactConfig struct {
+	// Enabled controls whether this artifact is generated. Defaults to false.
+	Enabled bool `yaml:"enabled"`
+	// When is a condition expression keyed off the computed semver bump.
+	// Accepted values: "always", "major", "minor", "patch", "minor_or_above",
+	// "patch_or_above". Empty means "always" when Enabled is true.
+	When string `yaml:"when"`
+	// Preset selects the built-in template preset for this artifact.
+	// Accepted values: "default", "compact", "detailed". Empty means "default".
+	Preset string `yaml:"preset"`
+	// Template is a repository-relative path to a custom Go text/template file
+	// that overrides the preset entirely. Loaded from the release tag tree.
+	// Empty means use the preset.
+	Template string `yaml:"template"`
+}
+
+// ReleaseNotesConfig extends ArtifactConfig with release-notes-specific
+// settings.
+type ReleaseNotesConfig struct {
+	ArtifactConfig `yaml:",inline"`
+	// Tone shapes the LLM's writing style for the release narrative.
+	// Accepted values: "concise" (default), "detailed", "marketing".
+	Tone string `yaml:"tone"`
+}
+
+// ReleaseGrouping controls how commits and merged PRs are classified into
+// changelog sections.
+type ReleaseGrouping struct {
+	// Source is the grouping strategy. Accepted values: "conventional"
+	// (parse Conventional Commit prefixes), "labels" (group by PR label).
+	// "llm" is reserved for a future phase. Empty means "conventional".
+	Source string `yaml:"source"`
+	// Sections is the canonical display order for changelog sections. When
+	// empty, a built-in default order is used (Features, Bug Fixes, etc.).
+	Sections []string `yaml:"sections"`
+	// Labels maps PR label names to their display section. Used when
+	// Source is "labels". Keys are label names; values are section titles.
+	Labels map[string]string `yaml:"labels"`
+}
+
+// ReleasePublish controls which publish destinations are active.
+type ReleasePublish struct {
+	// ReleaseBody configures publishing the generated content into the VCS
+	// release body via idempotent marker splice.
+	ReleaseBody PublishTarget `yaml:"releaseBody"`
+	// ChangelogPR configures publishing the changelog section via a single
+	// deduplicated pull-request to CHANGELOG.md.
+	ChangelogPR PublishTarget `yaml:"changelogPR"`
+	// Pages configures publishing to a docs branch or GitHub Pages site.
+	// Wired in Phase 2. Present here for forward-compatible schema parsing.
+	Pages PublishTarget `yaml:"pages"`
+}
+
+// PublishTarget holds the per-destination publish settings.
+type PublishTarget struct {
+	// Enabled controls whether this publish destination is active.
+	Enabled bool `yaml:"enabled"`
 }
 
 // PromptCustomization lets users override or extend a tool's system prompt.
