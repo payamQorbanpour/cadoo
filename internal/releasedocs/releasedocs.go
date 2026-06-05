@@ -26,6 +26,13 @@ const (
 	// The blog generator (Phase 2 plan 03) produces this kind from the release
 	// context and any configured template.
 	KindBlog ArtifactKind = "blog"
+	// KindAPIDocs identifies the apidocs generator family. A single GenerateMulti
+	// call emits three artifacts all sharing this Kind, each differentiated by
+	// their Filename field: "openapi.yaml" (raw spec), "api-reference.html"
+	// (self-contained Redoc HTML), and "api-reference.md" (Markdown reference).
+	// The apidocs generator implements the MultiGenerator interface, which the
+	// dispatcher prefers over the single-artifact Generator.Generate path.
+	KindAPIDocs ArtifactKind = "apidocs"
 )
 
 // PublishTarget identifies where a publisher delivers artifacts.
@@ -64,8 +71,14 @@ const (
 type Artifact struct {
 	// Kind identifies which generator produced this artifact.
 	Kind ArtifactKind
-	// Content is the rendered artifact bytes (Markdown for all current kinds).
+	// Content is the rendered artifact bytes.
 	Content []byte
+	// Filename, when non-empty, overrides the default "{kind}.md" path computed
+	// by publishers. Use this for artifacts that are not Markdown (e.g.
+	// "openapi.yaml", "api-reference.html", "api-reference.md"). When empty,
+	// publishers fall back to string(art.Kind)+".md" for backward compatibility
+	// with existing changelog, release_notes, and blog artifacts.
+	Filename string
 }
 
 // ReleaseJob is the queue payload for a single release-docs invocation.
@@ -152,6 +165,24 @@ type Generator interface {
 	// Generate builds the artifact. It must respect rc.LLM == nil by
 	// producing deterministic output without any LLM call.
 	Generate(ctx context.Context, rc ReleaseContext) (Artifact, error)
+}
+
+// MultiGenerator is an OPTIONAL interface that generators may implement when
+// a single logical Generate call must emit more than one Artifact (e.g. the
+// apidocs generator emits a raw spec, an HTML reference, and a Markdown
+// reference in a single pass). The dispatcher type-asserts this interface
+// against each Generator before calling Generate: when present, it calls
+// GenerateMulti and appends all returned artifacts; when absent, it falls back
+// to the standard single-artifact Generate path. Existing generators
+// (changelog, releasenotes, blog) satisfy the base Generator interface only and
+// are unaffected.
+type MultiGenerator interface {
+	// GenerateMulti builds all artifacts for this generator family in a single
+	// pass. It must respect rc.LLM == nil by producing deterministic output
+	// without any LLM call. On skip conditions (no spec found, parse failure,
+	// etc.) it returns (nil, nil) — never a non-nil error — and logs the reason
+	// via slog (D-10).
+	GenerateMulti(ctx context.Context, rc ReleaseContext) ([]Artifact, error)
 }
 
 // Publisher is the interface every release-artifact publisher implements.
