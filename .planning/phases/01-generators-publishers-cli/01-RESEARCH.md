@@ -381,21 +381,21 @@ if rr, ok := provider.(vcs.PriorReviewReader); ok {
 | A4 | The `xanzy` line in `go.mod` resolves to the `gitlab.com/gitlab-org/api/client-go` module at build time (replace/alias) | Pitfall 1 | Low — `make build` currently passes, so the existing import already resolves; new code using the same import will too. |
 | A5 | Conventional-Commit parsing for Phase 1 is limited to `feat/fix/perf/feat!/BREAKING CHANGE` and is hand-rollable | Don't Hand-Roll | Low — SPEC D-09 scopes it to exactly these prefixes. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`llm` grouping source in Phase 1?**
    - What we know: SPEC §10 open item; CONTEXT.md Deferred Ideas says **defer** — Phase 1 ships `conventional` + `labels` only; the config enum may accept `llm` but it's not implemented.
    - What's unclear: whether the config struct should validate/reject `llm` or silently fall back to `conventional`.
-   - Recommendation: Accept `llm` in the enum, log a "not implemented in this phase, falling back to conventional" warning. Matches the graceful-degradation philosophy.
+   - RESOLVED: Accept `llm` in the enum, log a "not implemented in this phase, falling back to conventional" warning. Matches the graceful-degradation philosophy.
 
 2. **Where do `vcs.MergedPR` / `vcs.Release` / `vcs.FileWrite` live, and what fields?**
    - What we know: They must live in `internal/vcs` (orchestrator rule), align with existing `vcs.PullRequest`/`vcs.FileChange` field naming (`internal/vcs/vcs.go:23,41`).
    - What's unclear: exact field set (the SPEC sketches the interfaces, not the structs).
-   - Recommendation: `vcs.Commit{SHA, Message, Author, Date}`, `vcs.MergedPR{Number, Title, Body, Author, Labels[], MergedAt, MergeSHA}`, `vcs.Release{ID, TagName, Body, Draft, Prerelease}`, `vcs.FileWrite{Path, Content[], Mode}`. Planner finalizes (Claude's Discretion per CONTEXT.md).
+   - RESOLVED: `vcs.Commit{SHA, Message, Author, Date}`, `vcs.MergedPR{Number, Title, Body, Author, Labels[], MergedAt, MergeSHA}`, `vcs.Release{ID, TagName, Body, Draft, Prerelease}`, `vcs.FileWrite{Path, Content[], Mode}`. Planner finalizes (Claude's Discretion per CONTEXT.md).
 
 3. **Does go-github need GraphQL for any release op (like thread resolution)?**
    - What we know: Thread resolution needed GraphQL (`github.go:355`); release/PR/contents are REST.
-   - Recommendation: All Phase-1 release ops are REST — no GraphQL seam needed. Confirm `EditRelease` exists in v66 REST.
+   - RESOLVED: All Phase-1 release ops are REST — no GraphQL seam needed. Confirm `EditRelease` exists in v66 REST.
 
 ## Environment Availability
 
