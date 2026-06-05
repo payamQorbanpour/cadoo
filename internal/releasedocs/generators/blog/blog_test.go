@@ -12,19 +12,6 @@ import (
 	"github.com/payamqorbanpour/cadoo/internal/vcs"
 )
 
-// fakeNoChatLLM is a fake llm.Provider that fails the test if Chat is invoked.
-// Use it for nil-LLM code paths to prove no Chat call occurs.
-type fakeNoChatLLM struct {
-	t *testing.T
-}
-
-// Chat implements llm.Provider — fails the test unconditionally.
-func (f *fakeNoChatLLM) Chat(_ context.Context, _ llm.ChatRequest) (*llm.ChatResponse, error) {
-	f.t.Helper()
-	f.t.Fatal("Chat must not be called when LLM is expected to be unused")
-	return nil, errors.New("unexpected Chat call")
-}
-
 // countingLLM records how many times Chat is invoked and returns a canned response.
 type countingLLM struct {
 	calls int
