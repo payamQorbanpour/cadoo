@@ -107,6 +107,16 @@ func (d *Dispatcher) Run(ctx context.Context, job ReleaseJob) error {
 				"kind", gen.Kind(), "bump", rc.Bump, "repo", job.Repo)
 			continue
 		}
+		// Prefer MultiGenerator when the generator implements it (for families
+		// that emit multiple files — e.g. apidocs emits spec + HTML + Markdown).
+		if mg, ok := gen.(MultiGenerator); ok {
+			multi, err := mg.GenerateMulti(ctx, rc)
+			if err != nil {
+				return fmt.Errorf("releasedocs: generator %s: %w", gen.Kind(), err)
+			}
+			arts = append(arts, multi...)
+			continue
+		}
 		art, err := gen.Generate(ctx, rc)
 		if err != nil {
 			return fmt.Errorf("releasedocs: generator %s: %w", gen.Kind(), err)
