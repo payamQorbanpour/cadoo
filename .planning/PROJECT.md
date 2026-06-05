@@ -72,4 +72,4 @@ After a customer release, Cadoo auto-generates and publishes the configured rele
 | Three-phase delivery: CLI → webhook+state → API docs | Ship dogfoodable CLI value first; defer webhook/state and OpenAPI complexity | — Pending (proposed) |
 
 ---
-*Last updated: 2026-06-04 after Release Docs ingest bootstrap*
+*Last updated: 2026-06-05 — Phase 02 complete (webhook auto-trigger + DB state + blog generator + pages publisher)*
