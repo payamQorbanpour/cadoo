@@ -1,0 +1,14 @@
+version: 2.5.3
+source: npm:redoc@2.5.3 bundles/redoc.standalone.js
+sha256: 1320f442151c57c447d3b70c7ffc6c4f86d08464020fe34c8cc5d3164e9944f0
+size_bytes: 1097271
+license: MIT
+license_url: https://github.com/Redocly/redoc/blob/main/LICENSE
+vendored: 2026-06-06
+note: >
+  Vendored as a go:embed target. The uncompressed bundle adds ~1.2 MB to each
+  binary that embeds it. This is acceptable for server binaries (cadoo-api,
+  cadoo-worker, cadoo-webhook); cadoo-cli does not embed this asset.
+  To re-vendor: npm install redoc@2.5.3 && cp node_modules/redoc/bundles/redoc.standalone.js
+  internal/releasedocs/generators/apidocs/assets/redoc.standalone.js
+  Verify sha256 matches this file before committing.
