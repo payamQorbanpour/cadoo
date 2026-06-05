@@ -25,6 +25,8 @@ func main() {
 		reviewCmd(os.Args[2:])
 	case "ci":
 		ciCmd(os.Args[2:])
+	case "release-docs":
+		releaseDocsCmd(os.Args[2:])
 	case "help", "-h", "--help":
 		usage()
 	default:
@@ -45,6 +47,7 @@ Commands:
   config validate    Validate a .cadoo.yaml file
   review <pr-url>    Review a PR (Phase 1)
   ci --mr <url>      One-shot CI-mode review (GitLab; runs describe/review/improve by default)
+  release-docs       Generate and publish release artifacts (--repo/--from/--to)
   help               Show this help
 `)
 }

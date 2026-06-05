@@ -207,7 +207,7 @@ func TestDisabledNotGenerated(t *testing.T) {
 		// Use a generator that calls releasedocs.Enabled internally to mirror
 		// the real changelog.Generator behavior.
 		gen := &conditionalGenerator{
-			kind:       releasedocs.KindChangelog,
+			kind:        releasedocs.KindChangelog,
 			artifactCfg: cfgOnlyMajor.ReleaseDocs.Artifacts.Changelog,
 		}
 		pub := &recordingPublisher{target: releasedocs.TargetChangelogPR}
