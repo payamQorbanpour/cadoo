@@ -86,7 +86,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 02-05-PLAN.md — Webhook release/tag ingestion (GitHub + GitLab) → ReleaseJob → dual-mode enqueue; riverq ReleaseArgs/EnqueueRelease
+- [x] 02-05-PLAN.md — Webhook release/tag ingestion (GitHub + GitLab) → ReleaseJob → dual-mode enqueue; riverq ReleaseArgs/EnqueueRelease
 
 **Wave 4** *(blocked on 02-05)*
 
@@ -117,5 +117,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Generators + Publishers + CLI | 7/7 | Complete   | 2026-06-05 |
-| 2. Webhook Auto-Trigger + State | 4/6 | In Progress|  |
+| 2. Webhook Auto-Trigger + State | 5/6 | In Progress|  |
 | 3. API Docs / OpenAPI | 0/TBD | Not started | - |
