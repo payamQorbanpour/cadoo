@@ -120,7 +120,7 @@ Plans:
 
 **Wave 4** *(blocked on 03-03)*
 
-- [ ] 03-04-PLAN.md — Renderers: render_html.go (offline Redoc, no-CDN, deterministic sorted-key JSON) + render_markdown.go (text/template, sorted iteration, injection-escape) + preset + golden files
+- [x] 03-04-PLAN.md — Renderers: render_html.go (offline Redoc, no-CDN, deterministic sorted-key JSON) + render_markdown.go (text/template, sorted iteration, injection-escape) + preset + golden files
 
 **Wave 5** *(blocked on 03-04)*
 
@@ -135,4 +135,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Generators + Publishers + CLI | 7/7 | Complete   | 2026-06-05 |
 | 2. Webhook Auto-Trigger + State | 6/6 | Complete   | 2026-06-05 |
-| 3. API Docs / OpenAPI | 3/5 | In Progress|  |
+| 3. API Docs / OpenAPI | 4/5 | In Progress|  |
