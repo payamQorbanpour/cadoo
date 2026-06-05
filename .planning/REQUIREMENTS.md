@@ -57,12 +57,12 @@ Each requirement is assigned to its **first delivering phase**. Requirements mar
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| REQ-release-artifact-generation | Phase 1 | Pending |
-| REQ-per-artifact-toggles | Phase 1 | Pending |
-| REQ-configurable-templates | Phase 1 | Pending |
-| REQ-release-docs-idempotency | Phase 1 | Pending |
-| REQ-configurable-trigger | Phase 1 | Pending |
-| REQ-publish-destinations | Phase 1 | Pending |
+| REQ-release-artifact-generation | Phase 1 | ✓ Partial — changelog + release-notes delivered; blog (Phase 2), api-docs (Phase 3) |
+| REQ-per-artifact-toggles | Phase 1 | ✓ Delivered |
+| REQ-configurable-templates | Phase 1 | ✓ Delivered |
+| REQ-release-docs-idempotency | Phase 1 | ✓ Partial — stateless/marker mode delivered; DB-backed state (Phase 2) |
+| REQ-configurable-trigger | Phase 1 | ✓ Partial — CLI/CI entry point delivered; release/tag webhook (Phase 2) |
+| REQ-publish-destinations | Phase 1 | ✓ Partial — releasebody + changelogpr delivered; pages (Phase 2) |
 
 **Coverage:**
 - v1 requirements: 6 total
@@ -75,4 +75,4 @@ Each requirement is assigned to its **first delivering phase**. Requirements mar
 
 ---
 *Requirements defined: 2026-06-04*
-*Last updated: 2026-06-04 after Release Docs ingest bootstrap*
+*Last updated: 2026-06-05 — Phase 1 complete, traceability updated*
