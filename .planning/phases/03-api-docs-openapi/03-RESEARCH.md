@@ -580,7 +580,10 @@ type APIDocsConfig struct {
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> All four resolved into plan task actions during planning (03-01..03-05): libopenapi-validator `@latest` pin and Redoc vendor path → 03-01; `utils.OpenApi2/OpenApi3` constant usage → 03-03; YAML→JSON sorted-key conversion → 03-04.
+
 
 1. **SpecType constant values for version switch**
    - What we know: The switch on `info.SpecType` uses string constants from `utils` package.
