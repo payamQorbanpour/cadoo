@@ -71,11 +71,26 @@ Plans:
   4. The pages publisher commits rendered artifacts to the configured `branch`/`dir` at deterministic paths (`docs/releases/vX.Y.Z/…`); re-runs overwrite the same paths.
   5. The blog generator produces a long-form announcement on minor/major releases (per its `when:` condition) and is routed to pages.
 
-**Plans**: TBD
+**Plans**: 6 plans
 
 Plans:
+**Wave 1** *(parallel)*
 
-- [ ] 02-01: TBD
+- [ ] 02-01-PLAN.md — CR-01 fix (TagReleasePublisher) + config schema (Blog, PagesPublishTarget) + KindBlog/TargetPages constants
+- [ ] 02-02-PLAN.md — Migration 0006 release_docs_state + nil-tolerant state.Store (DB-backed idempotency)
+
+**Wave 2** *(parallel; blocked on 02-01)*
+
+- [ ] 02-03-PLAN.md — Blog generator (long-form, when: minor_or_above, nil-tolerant) (TDD)
+- [ ] 02-04-PLAN.md — Pages publisher (deterministic paths via BranchCommitter.UpsertFile, idempotent overwrite)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 02-05-PLAN.md — Webhook release/tag ingestion (GitHub + GitLab) → ReleaseJob → dual-mode enqueue; riverq ReleaseArgs/EnqueueRelease
+
+**Wave 4** *(blocked on 02-05)*
+
+- [ ] 02-06-PLAN.md — Worker consumer: releasedocs dispatcher with blog+pages defaults + DB-backed PostedStore; releaseWorker registration
 
 ### Phase 3: API Docs / OpenAPI
 
@@ -102,5 +117,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Generators + Publishers + CLI | 7/7 | Complete   | 2026-06-05 |
-| 2. Webhook Auto-Trigger + State | 0/TBD | Not started | - |
+| 2. Webhook Auto-Trigger + State | 0/6 | Planned | - |
 | 3. API Docs / OpenAPI | 0/TBD | Not started | - |
