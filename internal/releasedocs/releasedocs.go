@@ -112,6 +112,10 @@ type ReleaseContext struct {
 	LLM llm.Provider
 	// Model is the model name to pass to LLM.Chat. Empty when LLM is nil.
 	Model string
+	// GroupedModel is the deterministic, pre-built grouped change model
+	// produced once by BuildContext. Generators consume it directly; they
+	// must not call BuildGroupedModel themselves (build-once principle, D-09).
+	GroupedModel GroupedModel
 }
 
 // FileFetcher is an OPTIONAL capability VCS adapters may implement so the

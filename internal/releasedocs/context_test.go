@@ -11,6 +11,39 @@ import (
 	"github.com/payamqorbanpour/cadoo/internal/vcs"
 )
 
+// minimalProvider is a test helper that implements only vcs.Provider (no
+// optional capabilities). It is used to test graceful degradation when the
+// provider lacks vcs.ReleaseRangeReader.
+type minimalProvider struct{}
+
+func (m *minimalProvider) Kind() vcs.Kind { return vcs.KindGitHub }
+func (m *minimalProvider) FetchPullRequest(_ context.Context, _ string, _ int64) (*vcs.PullRequest, error) {
+	return &vcs.PullRequest{}, nil
+}
+func (m *minimalProvider) ListChangedFiles(_ context.Context, _ *vcs.PullRequest) ([]vcs.FileChange, error) {
+	return nil, nil
+}
+func (m *minimalProvider) PostSummaryComment(_ context.Context, _ *vcs.PullRequest, _ string) (string, error) {
+	return "", nil
+}
+func (m *minimalProvider) UpdateSummaryComment(_ context.Context, _ *vcs.PullRequest, _, _ string) error {
+	return nil
+}
+func (m *minimalProvider) PostInlineComments(_ context.Context, _ *vcs.PullRequest, _ []vcs.InlineComment) ([]vcs.PostedInlineRef, error) {
+	return nil, nil
+}
+func (m *minimalProvider) ResolveThread(_ context.Context, _ *vcs.PullRequest, _ string) error {
+	return nil
+}
+func (m *minimalProvider) EditPullRequestBody(_ context.Context, _ *vcs.PullRequest, _ string) error {
+	return nil
+}
+func (m *minimalProvider) UpsertCheckRun(_ context.Context, _ *vcs.PullRequest, _ vcs.CheckRun) error {
+	return nil
+}
+
+var _ vcs.Provider = (*minimalProvider)(nil)
+
 // TestBump verifies that ComputeBump returns the correct SemverBump for tag
 // pairs and edge cases (first-release, malformed tags).
 func TestBump(t *testing.T) {
@@ -265,7 +298,9 @@ func TestBuildContext(t *testing.T) {
 	})
 
 	t.Run("degrades gracefully when provider lacks ReleaseRangeReader", func(t *testing.T) {
-		_, provider := releasedocstest.NewFake(releasedocstest.OmitRangeReader())
+		// Use a provider that genuinely does not implement vcs.ReleaseRangeReader
+		// (the releasedocstest.Fake uses embedding which promotes all methods).
+		provider := &minimalProvider{}
 
 		job := releasedocs.ReleaseJob{
 			Provider: vcs.KindGitHub,
