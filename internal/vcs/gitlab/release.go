@@ -194,7 +194,7 @@ func (a *Adapter) GetReleaseByTag(ctx context.Context, repo, tag string) (*vcs.R
 // UpdateReleaseBodyByTag directly. This interface implementation returns an
 // error directing callers to the type-safe helper.
 func (a *Adapter) UpdateReleaseBody(_ context.Context, repo string, _ int64, _ string) error {
-	return fmt.Errorf("gitlab.UpdateReleaseBody: GitLab releases have no numeric ID; " +
+	return fmt.Errorf("gitlab.UpdateReleaseBody: GitLab releases have no numeric ID; "+
 		"type-assert *gitlab.Adapter and call UpdateReleaseBodyByTag(ctx, %q, tag, body) instead", repo)
 }
 

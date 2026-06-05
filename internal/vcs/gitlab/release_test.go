@@ -32,15 +32,15 @@ func TestGitLabListCommits(t *testing.T) {
 		resp := map[string]any{
 			"commits": []map[string]any{
 				{
-					"id":           "abc123",
-					"message":      "feat: add thing",
-					"author_name":  "Alice",
+					"id":            "abc123",
+					"message":       "feat: add thing",
+					"author_name":   "Alice",
 					"authored_date": "2024-01-01T00:00:00Z",
 				},
 				{
-					"id":           "def456",
-					"message":      "fix: patch bug",
-					"author_name":  "Bob",
+					"id":            "def456",
+					"message":       "fix: patch bug",
+					"author_name":   "Bob",
 					"authored_date": "2024-01-02T00:00:00Z",
 				},
 			},

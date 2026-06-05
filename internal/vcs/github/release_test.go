@@ -147,11 +147,11 @@ func TestGitHubGetReleaseByTag(t *testing.T) {
 			return
 		}
 		rel := map[string]any{
-			"id":          int64(42),
-			"tag_name":    "v1.1.0",
-			"body":        "Initial release notes",
-			"draft":       false,
-			"prerelease":  false,
+			"id":         int64(42),
+			"tag_name":   "v1.1.0",
+			"body":       "Initial release notes",
+			"draft":      false,
+			"prerelease": false,
 		}
 		_ = json.NewEncoder(w).Encode(rel)
 	}))
