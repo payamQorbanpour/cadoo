@@ -103,11 +103,28 @@ Plans:
   2. The generated API docs and OpenAPI are published to pages at deterministic paths and are idempotent across re-runs.
   3. A repo outside the supported framework set degrades gracefully (apidocs skipped with a logged reason), without failing the rest of the release-docs run.
 
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
+**Wave 1** *(BLOCKING — deps + model/wiring foundation)*
 
-- [ ] 03-01: TBD
+- [ ] 03-01-PLAN.md — Wave 0 foundation: go get libopenapi + libopenapi-validator, vendor Redoc bundle, Artifact.Filename + KindAPIDocs + MultiGenerator + dispatcher spread, pages-publisher Filename change, APIDocsConfig
+
+**Wave 2** *(blocked on 03-01)*
+
+- [ ] 03-02-PLAN.md — Wave 0 test scaffold: fixtures (v2/v3/v31/invalid/remote-ref/oversized), fakeFetcher, table-driven stubs for D-01..D-10 + security, pages apidocs path/idempotency tests
+
+**Wave 3** *(blocked on 03-02)*
+
+- [ ] 03-03-PLAN.md — Spec ingestion: discover.go (fallback + 404 tolerance) + parse.go (libopenapi, version detect, validation, $ref-SSRF + 5MB-OOM guards, Swagger 2.0 isolation)
+
+**Wave 4** *(blocked on 03-03)*
+
+- [ ] 03-04-PLAN.md — Renderers: render_html.go (offline Redoc, no-CDN, deterministic sorted-key JSON) + render_markdown.go (text/template, sorted iteration, injection-escape) + preset + golden files
+
+**Wave 5** *(blocked on 03-04)*
+
+- [ ] 03-05-PLAN.md — apidocs Generator (Kind/Enabled/GenerateMulti, raw passthrough, graceful skip) + DefaultGenerators registration + .cadoo.yaml.example + full-suite + offline-render checkpoint
 
 ## Progress
 
@@ -118,4 +135,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Generators + Publishers + CLI | 7/7 | Complete   | 2026-06-05 |
 | 2. Webhook Auto-Trigger + State | 6/6 | Complete   | 2026-06-05 |
-| 3. API Docs / OpenAPI | 0/TBD | Not started | - |
+| 3. API Docs / OpenAPI | 0/5 | Planned | - |
