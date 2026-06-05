@@ -1,0 +1,52 @@
+openapi: 3.0.3
+info:
+  title: Remote Ref Test
+  description: |
+    A spec containing both a remote URL $ref and a local file $ref.
+    Used to verify that the parser does NOT resolve these references
+    when AllowRemoteReferences=false and AllowFileReferences=false (T-03-03).
+  version: "1.0.0"
+servers:
+  - url: https://api.example.com/v1
+paths:
+  /pets:
+    get:
+      summary: List pets
+      operationId: listPets
+      tags:
+        - pets
+      responses:
+        "200":
+          description: A list of pets
+          content:
+            application/json:
+              schema:
+                # Remote URL $ref — must NOT be resolved (SSRF guard T-03-03)
+                $ref: "https://example.com/schemas/Pet.yaml"
+  /stores:
+    get:
+      summary: List stores
+      operationId: listStores
+      tags:
+        - stores
+      responses:
+        "200":
+          description: A list of stores
+          content:
+            application/json:
+              schema:
+                # Local file $ref — must NOT be resolved (file traversal guard T-03-03)
+                $ref: "./external.yaml#/components/schemas/Store"
+components:
+  schemas:
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string
