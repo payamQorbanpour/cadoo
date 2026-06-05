@@ -50,11 +50,33 @@ func BuildContext(
 		}
 		resolved, err := rr.LatestTagBefore(ctx, job.Repo, job.ToRef, tagPattern)
 		if err != nil {
-			slog.Warn("releasedocs: LatestTagBefore failed; proceeding with empty fromRef (first-release)",
+			slog.Warn("releasedocs: LatestTagBefore failed; treating as first-release",
 				"repo", job.Repo, "toRef", job.ToRef, "err", err)
 		} else {
 			fromRef = resolved
 		}
+	}
+
+	// First-release guard: when fromRef is still empty after the LatestTagBefore
+	// attempt, no prior tag exists. Both the GitHub CompareCommits API and the
+	// GitLab Compare API reject an empty base ref with a 422 error, so we must
+	// not call ListCommits or ListMergedPRs. Return a minimal ReleaseContext with
+	// empty commits/PRs — generators must handle this gracefully (D-10, D-11).
+	if fromRef == "" {
+		slog.Info("releasedocs: no prior tag found; returning minimal context for first release",
+			"repo", job.Repo, "toRef", job.ToRef)
+		return ReleaseContext{
+			Repo:         job.Repo,
+			Org:          job.Org,
+			FromRef:      "",
+			ToRef:        job.ToRef,
+			Bump:         BumpMajor, // first release is always a major bump
+			Config:       cfg,
+			Provider:     provider,
+			LLM:          llmProvider,
+			Model:        model,
+			GroupedModel: BuildGroupedModel(nil, nil, cfg),
+		}, nil
 	}
 
 	// Step 3: list commits and merged PRs in the range.

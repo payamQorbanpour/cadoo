@@ -6,8 +6,9 @@
 // (graceful degradation; D-15). When publish.pages.enabled is false, Publish
 // is a no-op.
 //
-// Path construction uses path.Join (never raw fmt.Sprintf with rc.ToRef) to
-// neutralize path-traversal attacks on adversarial tag names (T-02-07).
+// Path construction uses path.Join to clean separators and ".." components, but
+// path.Join alone does NOT prevent escape from the base directory — a guard that
+// rejects any result not rooted under {dir}/ is required (T-02-07). See Publish.
 package pages
 
 import (
@@ -15,6 +16,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path"
+	"strings"
 
 	"github.com/payamqorbanpour/cadoo/internal/releasedocs"
 	"github.com/payamqorbanpour/cadoo/internal/vcs"
@@ -31,8 +33,11 @@ func (Publisher) Target() releasedocs.PublishTarget {
 }
 
 // Publish commits each non-empty artifact from arts to the configured docs
-// branch at the path {dir}/releases/{toRef}/{kind}.md. Paths are constructed
-// with path.Join to prevent path-traversal on adversarial tag names (T-02-07).
+// branch at the path {dir}/releases/{toRef}/{kind}.md. Paths are computed with
+// path.Join to clean separators and ".." segments. A prefix guard then rejects
+// any result that does not start with "{dir}/" — path.Join cleans but does not
+// prevent escape from the base directory, so adversarial tag names (e.g.
+// "../../etc/shadow") are rejected here (T-02-07).
 //
 // When rc.Config.Publish.Pages.Enabled is false, Publish returns nil
 // immediately (no-op). When rc.Provider does not implement vcs.BranchCommitter,
@@ -72,10 +77,17 @@ func (Publisher) Publish(ctx context.Context, rc releasedocs.ReleaseContext, art
 			continue
 		}
 
-		// Build the deterministic, traversal-safe path using path.Join.
-		// path.Join cleans redundant separators and ".." components, which
-		// neutralizes path-traversal attempts embedded in rc.ToRef (T-02-07).
+		// Build the path using path.Join to clean separators and ".." segments.
 		p := path.Join(dir, "releases", rc.ToRef, string(art.Kind)+".md")
+
+		// Guard: path.Join cleans ".." but does not prevent escape from the base
+		// directory. Reject any path that does not start with the expected prefix.
+		expectedPrefix := dir + "/"
+		if !strings.HasPrefix(p, expectedPrefix) {
+			slog.Warn("pages: computed path escapes base dir; skipping artifact",
+				"path", p, "dir", dir, "toRef", rc.ToRef, "kind", art.Kind)
+			continue
+		}
 
 		commitMsg := "docs: release " + rc.ToRef + " " + string(art.Kind)
 
