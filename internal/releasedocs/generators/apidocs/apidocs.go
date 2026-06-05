@@ -53,8 +53,8 @@ func (g *Generator) Generate(_ context.Context, _ releasedocs.ReleaseContext) (r
 // GenerateMulti implements releasedocs.MultiGenerator. It fetches the committed
 // OpenAPI/Swagger spec via FileFetcher, validates it, and emits three artifacts:
 //   - openapi.yaml: raw spec bytes (D-03, D-09)
-//   - api-reference.html: self-contained Redoc HTML (D-05) — TODO(03-04)
-//   - api-reference.md: deterministic Markdown reference (D-06) — TODO(03-05)
+//   - api-reference.html: self-contained Redoc HTML (D-05)
+//   - api-reference.md: deterministic Markdown reference (D-06)
 //
 // On any skip condition (spec not found, parse failure, validation failure,
 // unsupported version), it returns (nil, nil) and logs the reason (D-10).
@@ -69,7 +69,7 @@ func (g *Generator) GenerateMulti(ctx context.Context, rc releasedocs.ReleaseCon
 	}
 
 	// Step 2: parse, version-detect, validate, extract path model (D-09, D-10).
-	_, err = loadSpec(specBytes)
+	model, err := loadSpec(specBytes)
 	if err != nil {
 		slog.Warn("apidocs: skipping — spec parse/validation failed",
 			"repo", rc.Repo, "toRef", rc.ToRef, "err", err)
@@ -84,18 +84,30 @@ func (g *Generator) GenerateMulti(ctx context.Context, rc releasedocs.ReleaseCon
 		Content:  specBytes,
 	}
 
-	// Artifact 2: self-contained Redoc HTML (D-05) — TODO(03-04): implement buildRedocHTML.
+	// Artifact 2: self-contained Redoc HTML (D-05).
+	htmlBytes, err := buildRedocHTML(specBytes, redocBundle)
+	if err != nil {
+		slog.Warn("apidocs: skipping HTML — buildRedocHTML failed",
+			"repo", rc.Repo, "toRef", rc.ToRef, "err", err)
+		htmlBytes = []byte{}
+	}
 	redocHTML := releasedocs.Artifact{
 		Kind:     releasedocs.KindAPIDocs,
 		Filename: "api-reference.html",
-		Content:  []byte{}, // TODO(03-04): fill in with buildRedocHTML result
+		Content:  htmlBytes,
 	}
 
-	// Artifact 3: deterministic Markdown reference (D-06) — TODO(03-05): implement renderMarkdown.
+	// Artifact 3: deterministic Markdown reference (D-06).
+	mdBytes, err := renderMarkdown(model)
+	if err != nil {
+		slog.Warn("apidocs: skipping Markdown — renderMarkdown failed",
+			"repo", rc.Repo, "toRef", rc.ToRef, "err", err)
+		mdBytes = []byte{}
+	}
 	mdRef := releasedocs.Artifact{
 		Kind:     releasedocs.KindAPIDocs,
 		Filename: "api-reference.md",
-		Content:  []byte{}, // TODO(03-05): fill in with renderMarkdown result
+		Content:  mdBytes,
 	}
 
 	return []releasedocs.Artifact{rawSpec, redocHTML, mdRef}, nil
