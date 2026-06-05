@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Created PROJECT.md, REQUIREMENTS.md, ROADMAP.md, STATE.md from SPEC ingest
-last_updated: "2026-06-05T11:43:06.534Z"
-last_activity: 2026-06-05 -- Phase 01 planning complete
+last_updated: "2026-06-05T12:01:25.498Z"
+last_activity: 2026-06-05 -- Phase 01 execution started
 progress:
   total_phases: 3
   completed_phases: 0
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-04)
 
 **Core value:** After a customer release, Cadoo auto-generates and publishes the configured release artifacts to the configured destinations — idempotently, with per-artifact toggles honored.
-**Current focus:** Phase 1 — Generators + Publishers + CLI
+**Current focus:** Phase 01 — generators-publishers-cli
 
 ## Current Position
 
-Phase: 1 of 3 (Generators + Publishers + CLI)
-Plan: 0 of TBD in current phase
-Status: Ready to execute
-Last activity: 2026-06-05 -- Phase 01 planning complete
+Phase: 01 (generators-publishers-cli) — EXECUTING
+Plan: 1 of 7
+Status: Executing Phase 01
+Last activity: 2026-06-05 -- Phase 01 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
