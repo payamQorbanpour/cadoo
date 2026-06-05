@@ -111,7 +111,7 @@ func main() {
 // buildEnqueue picks River (when pool != nil) or an in-process memory queue.
 func buildEnqueue(ctx context.Context, s *settings.Settings, pool *pgxpool.Pool, dispatcher *orchestrator.Dispatcher) (enqueueFn, func()) {
 	if pool != nil {
-		rq, err := riverq.New(pool, nil)
+		rq, err := riverq.New(pool, nil, nil)
 		if err != nil {
 			fatal("river queue", err)
 		}

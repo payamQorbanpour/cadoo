@@ -106,7 +106,7 @@ func runRiver(ctx context.Context, pool *pgxpool.Pool, dispatcher *orchestrator.
 		slog.Error("worker requires at least one VCS configured (GitHub App or GitLab token) when DATABASE_URL is set")
 		os.Exit(1)
 	}
-	q, err := riverq.New(pool, dispatcher)
+	q, err := riverq.New(pool, dispatcher, nil)
 	if err != nil {
 		slog.Error("river queue", "err", err)
 		os.Exit(1)
