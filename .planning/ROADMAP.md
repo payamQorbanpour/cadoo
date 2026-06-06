@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Generators + Publishers + CLI** - Stateless `cadoo release-docs` generates changelog + release notes and publishes to release body + CHANGELOG.md PR; dogfooded on Cadoo's own repo (completed 2026-06-05)
 - [x] **Phase 2: Webhook Auto-Trigger + State** - Release/tag webhook ingestion, ReleaseJob enqueue, worker consumer, DB state table, pages publisher, blog generator (completed 2026-06-05)
-- [ ] **Phase 3: API Docs / OpenAPI** - Code-derived extraction (narrow framework set), apidocs generator, pages output
+- [x] **Phase 3: API Docs / OpenAPI** - Code-derived extraction (narrow framework set), apidocs generator, pages output (completed 2026-06-06)
 
 ## Phase Details
 
@@ -124,7 +124,7 @@ Plans:
 
 **Wave 5** *(blocked on 03-04)*
 
-- [ ] 03-05-PLAN.md — apidocs Generator (Kind/Enabled/GenerateMulti, raw passthrough, graceful skip) + DefaultGenerators registration + .cadoo.yaml.example + full-suite + offline-render checkpoint
+- [x] 03-05-PLAN.md — apidocs Generator (Kind/Enabled/GenerateMulti, raw passthrough, graceful skip) + DefaultGenerators registration + .cadoo.yaml.example + full-suite + offline-render checkpoint
 
 ## Progress
 
@@ -135,4 +135,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Generators + Publishers + CLI | 7/7 | Complete   | 2026-06-05 |
 | 2. Webhook Auto-Trigger + State | 6/6 | Complete   | 2026-06-05 |
-| 3. API Docs / OpenAPI | 4/5 | In Progress|  |
+| 3. API Docs / OpenAPI | 5/5 | Complete   | 2026-06-06 |
