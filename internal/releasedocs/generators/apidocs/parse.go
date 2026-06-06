@@ -42,7 +42,7 @@ type operationItem struct {
 	Summary string
 	// Description is the operation's full description.
 	Description string
-	// Parameters is the sorted list of parameters for this operation.
+	// Parameters is the ordered list of parameters in spec source order.
 	Parameters []paramItem
 }
 
