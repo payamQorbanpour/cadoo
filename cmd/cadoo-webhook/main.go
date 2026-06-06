@@ -50,6 +50,7 @@ import (
 	"github.com/payamqorbanpour/cadoo/internal/llm/litellm"
 	"github.com/payamqorbanpour/cadoo/internal/notifiers/slack"
 	"github.com/payamqorbanpour/cadoo/internal/orchestrator"
+	"github.com/payamqorbanpour/cadoo/internal/releasedocs"
 	"github.com/payamqorbanpour/cadoo/internal/riverq"
 	"github.com/payamqorbanpour/cadoo/internal/settings"
 	"github.com/payamqorbanpour/cadoo/internal/vcs"
@@ -88,7 +89,7 @@ func main() {
 		fatal("dispatcher", err)
 	}
 
-	enqueue, queueCleanup := buildEnqueue(ctx, s, pool, dispatcher)
+	enqueue, enqueueRelease, queueCleanup := buildEnqueue(ctx, s, pool, dispatcher)
 	defer queueCleanup()
 
 	r := chi.NewRouter()
@@ -99,8 +100,8 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
-	r.Post("/webhook/github", githubWebhookHandler(s, enqueue))
-	r.Post("/webhook/gitlab", gitlabWebhookHandler(s, enqueue))
+	r.Post("/webhook/github", githubWebhookHandler(s, enqueue, enqueueRelease))
+	r.Post("/webhook/gitlab", gitlabWebhookHandler(s, enqueue, enqueueRelease))
 
 	if err := httpx.ListenAndServe(s.HTTPAddr, r); err != nil {
 		slog.Error("webhook shutdown", "err", err)
@@ -109,9 +110,14 @@ func main() {
 }
 
 // buildEnqueue picks River (when pool != nil) or an in-process memory queue.
-func buildEnqueue(ctx context.Context, s *settings.Settings, pool *pgxpool.Pool, dispatcher *orchestrator.Dispatcher) (enqueueFn, func()) {
+// It returns two typed enqueue functions — one for orchestrator.ToolJob and one
+// for releasedocs.ReleaseJob — plus a cleanup function. The two functions must
+// not be merged into a single interface{} function (Pitfall 3, 02-RESEARCH.md).
+func buildEnqueue(ctx context.Context, s *settings.Settings, pool *pgxpool.Pool, dispatcher *orchestrator.Dispatcher) (enqueueFn, enqueueReleaseFn, func()) {
 	if pool != nil {
-		rq, err := riverq.New(pool, nil)
+		// River branch: the webhook process only enqueues; cadoo-worker registers
+		// the release worker consumer (02-06 wires the real release dispatcher).
+		rq, err := riverq.New(pool, nil, nil)
 		if err != nil {
 			fatal("river queue", err)
 		}
@@ -128,9 +134,19 @@ func buildEnqueue(ctx context.Context, s *settings.Settings, pool *pgxpool.Pool,
 				Args:         job.Args,
 			})
 		}
-		return enqueue, func() {}
+		enqueueRelease := func(ctx context.Context, job releasedocs.ReleaseJob) error {
+			return rq.EnqueueRelease(ctx, riverq.ReleaseArgs{
+				Provider: string(job.Provider),
+				Repo:     job.Repo,
+				Org:      job.Org,
+				FromRef:  job.FromRef,
+				ToRef:    job.ToRef,
+			})
+		}
+		return enqueue, enqueueRelease, func() {}
 	}
 
+	// In-memory branch: single-process dev mode.
 	q := jobs.NewMemory()
 	if dispatcher != nil {
 		q.Register(orchestrator.ToolJob{}.Kind(), dispatcher)
@@ -140,6 +156,15 @@ func buildEnqueue(ctx context.Context, s *settings.Settings, pool *pgxpool.Pool,
 			return nil
 		}))
 	}
+	// Register the release_docs kind as a logged no-op for the webhook process.
+	// The in-process consumer for release jobs lives in cadoo-worker's runMemory,
+	// or in a future plan that wires the releasedocs dispatcher here. For now,
+	// receiving a release event in dev mode is logged but not dispatched, which
+	// is correct: the webhook returns 202 regardless (Pitfall 2, 02-RESEARCH.md).
+	q.Register(releasedocs.ReleaseJob{}.Kind(), jobs.HandlerFunc(func(_ context.Context, payload json.RawMessage) error {
+		slog.Info("releasedocs job received (in-memory mode; worker not running)", "payload", string(payload))
+		return nil
+	}))
 	go func() {
 		if err := q.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			slog.Error("memory queue run", "err", err)
@@ -149,9 +174,13 @@ func buildEnqueue(ctx context.Context, s *settings.Settings, pool *pgxpool.Pool,
 	enqueue := func(ctx context.Context, job orchestrator.ToolJob) error {
 		return q.Enqueue(ctx, job)
 	}
-	return enqueue, func() {}
+	enqueueRelease := func(ctx context.Context, job releasedocs.ReleaseJob) error {
+		return q.Enqueue(ctx, job)
+	}
+	return enqueue, enqueueRelease, func() {}
 }
 
+// TODO: DRY with cadoo-worker buildDispatcher — these two are nearly identical (WR-05).
 func buildDispatcher(s *settings.Settings, pool *pgxpool.Pool) (*orchestrator.Dispatcher, error) {
 	pool2 := map[vcs.Kind]vcs.Provider{}
 	if s.HasGitHub() {
@@ -238,7 +267,7 @@ func buildTrackers(s *settings.Settings) []issuetrackers.Tracker {
 
 // --- GitHub webhook --------------------------------------------------------
 
-func githubWebhookHandler(s *settings.Settings, enqueue enqueueFn) http.HandlerFunc {
+func githubWebhookHandler(s *settings.Settings, enqueue enqueueFn, enqueueRelease enqueueReleaseFn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -257,12 +286,22 @@ func githubWebhookHandler(s *settings.Settings, enqueue enqueueFn) http.HandlerF
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		// Webhook-side defaults for release trigger and tag pattern.
+		// The releasedocs dispatcher performs the authoritative check from
+		// .cadoo.yaml at job-run time (Pitfall 2, 02-RESEARCH.md).
+		const releaseTrigger = "release"
+		const tagPattern = "v*"
 		switch e := event.(type) {
 		case *gogithub.PullRequestEvent:
 			handleGithubPR(r.Context(), e, enqueue)
 		case *gogithub.IssueCommentEvent:
 			handleGithubComment(r.Context(), e, enqueue)
+		case *gogithub.ReleaseEvent:
+			handleGithubRelease(r.Context(), e, releaseTrigger, tagPattern, enqueueRelease)
+		case *gogithub.PushEvent:
+			handleGithubTagPush(r.Context(), e, releaseTrigger, tagPattern, enqueueRelease)
 		}
+		// Always return 202 Accepted regardless of trigger outcome (Pitfall 2).
 		w.WriteHeader(http.StatusAccepted)
 	}
 }
@@ -322,7 +361,7 @@ func handleGithubComment(ctx context.Context, e *gogithub.IssueCommentEvent, enq
 
 // --- GitLab webhook --------------------------------------------------------
 
-func gitlabWebhookHandler(s *settings.Settings, enqueue enqueueFn) http.HandlerFunc {
+func gitlabWebhookHandler(s *settings.Settings, enqueue enqueueFn, enqueueRelease enqueueReleaseFn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -340,12 +379,20 @@ func gitlabWebhookHandler(s *settings.Settings, enqueue enqueueFn) http.HandlerF
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		// Webhook-side defaults for release trigger and tag pattern.
+		const releaseTrigger = "release"
+		const tagPattern = "v*"
 		switch e := event.(type) {
 		case *glab.MergeEvent:
 			handleGitlabMR(r.Context(), e, enqueue)
 		case *glab.MergeCommentEvent:
 			handleGitlabNote(r.Context(), e, enqueue)
+		case *glab.ReleaseEvent:
+			handleGitlabRelease(r.Context(), e, releaseTrigger, tagPattern, enqueueRelease)
+		case *glab.TagEvent:
+			handleGitlabTagPush(r.Context(), e, releaseTrigger, tagPattern, enqueueRelease)
 		}
+		// Always return 202 Accepted regardless of trigger outcome (Pitfall 2).
 		w.WriteHeader(http.StatusAccepted)
 	}
 }

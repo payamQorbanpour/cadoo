@@ -1,0 +1,11 @@
+## What's New in {{ .ToRef }}
+
+{{ range .Groups -}}
+{{ if .Items -}}
+### {{ .Title }}
+
+{{ range .Items -}}
+- {{ .Summary }}
+{{ end }}
+{{ end -}}
+{{ end -}}

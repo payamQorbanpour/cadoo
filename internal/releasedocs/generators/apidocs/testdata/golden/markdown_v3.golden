@@ -1,0 +1,57 @@
+# API Reference — Petstore 3.0.3
+
+## GET /pets
+
+**List all pets**
+
+Returns a paginated list of all pets in the store.
+| Parameter | In |
+|-----------|-----|
+| limit | query |
+| offset | query |
+
+## POST /pets
+
+**Create a pet**
+
+Creates a new pet in the store.
+
+## GET /pets/{id}
+
+**Get a pet by ID**
+
+Returns a single pet identified by its numeric ID.
+| Parameter | In |
+|-----------|-----|
+| id | path |
+
+## PUT /pets/{id}
+
+**Update a pet**
+
+Replaces a pet&#39;s data by ID.
+| Parameter | In |
+|-----------|-----|
+| id | path |
+
+## DELETE /pets/{id}
+
+**Delete a pet**
+
+Removes a pet from the store by ID.
+| Parameter | In |
+|-----------|-----|
+| id | path |
+
+## GET /store/inventory
+
+**Get store inventory**
+
+Returns a map of status codes to quantities.
+
+## POST /store/orders
+
+**Place an order**
+
+Places a new order for a pet.
+

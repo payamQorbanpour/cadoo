@@ -1,0 +1,30 @@
+{
+  "source_path": "/Users/payam/projects/github.com/payamqorbanpour/cadoo/docs/superpowers/specs/2026-06-04-release-docs-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Release Docs — Design Spec",
+  "summary": "Technical design for a release-docs subsystem that auto-generates and publishes changelogs, release notes, blog posts, and API docs per release.",
+  "scope": [
+    "internal/releasedocs subsystem",
+    "ReleaseJob / ReleaseContext / Artifact / Generator / Publisher interfaces",
+    "changelog, release-notes, blog, api-docs generators",
+    "releasebody, changelogpr, pages publishers",
+    "config.ReleaseDocs (.cadoo.yaml releaseDocs block)",
+    "vcs.Provider capability interfaces (ReleaseRangeReader, ReleasePublisher, BranchCommitter)",
+    "webhook/worker/CLI release-docs trigger and ingestion",
+    "release-docs state store and migration"
+  ],
+  "cross_refs": [
+    "internal/orchestrator",
+    "internal/config",
+    "internal/vcs/github",
+    "internal/vcs/gitlab",
+    ".cadoo.yaml",
+    "CHANGELOG.md",
+    "db/migrations/NNNN_release_docs.sql"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}
