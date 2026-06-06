@@ -14,7 +14,9 @@ After a customer release, Cadoo auto-generates and publishes the configured rele
 
 <!-- Shipped and confirmed valuable. -->
 
-(Release Docs is the active milestone — nothing validated yet. The existing review pipeline ships separately and is the platform this builds on.)
+- **Release Docs milestone (Phases 1–3) complete** (2026-06-06): changelog + release notes + blog generators, release-body/CHANGELOG-PR/pages publishers, webhook auto-trigger + DB state, and code API docs / OpenAPI (committed-spec ingestion → offline Redoc HTML + deterministic Markdown, published to pages). Idempotent across re-runs; per-artifact toggles honored. Validated in Phase 3: API Docs / OpenAPI.
+
+The existing review pipeline ships separately and is the platform this builds on.
 
 ### Active
 
@@ -72,4 +74,4 @@ After a customer release, Cadoo auto-generates and publishes the configured rele
 | Three-phase delivery: CLI → webhook+state → API docs | Ship dogfoodable CLI value first; defer webhook/state and OpenAPI complexity | — Pending (proposed) |
 
 ---
-*Last updated: 2026-06-05 — Phase 02 complete (webhook auto-trigger + DB state + blog generator + pages publisher)*
+*Last updated: 2026-06-06 — Phase 03 complete (API docs / OpenAPI: committed-spec ingestion + offline Redoc HTML + deterministic Markdown → pages). Release Docs milestone (Phases 1–3) complete.*
