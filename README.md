@@ -21,6 +21,7 @@ Cadoo posts inline review comments, generates PR descriptions, suggests improvem
 - **Per-repo config** — `.cadoo.yaml` loaded from the PR head; controls which tools auto-run on which events and paths.
 - **Sandboxed static analysis** — runs 10–15 linters inside isolated containers, results fused into the model's context.
 - **Knowledge base + learnings** — pgvector-backed; `/learn` and `/unlearn` teach Cadoo team-specific rules that persist across reviews.
+- **Release Docs** — generates release notes and changelog documentation from review insights and code changes.
 - **Enterprise-ready** — OIDC + SAML SSO, RBAC, tamper-resistant audit log, Helm chart with PodDisruptionBudget, NetworkPolicy, and ServiceMonitor.
 
 ## Sample output
@@ -226,6 +227,62 @@ GitHub adapter is built on `bradleyfalzon/ghinstallation` + `google/go-github/v6
 Cadoo posts a check run named `cadoo/review` on every `/review` dispatch. Add it to your branch protection rules to block merges on findings of severity `block` (default).
 
 Details: [docs/PRE_MERGE_GATES.md](docs/PRE_MERGE_GATES.md).
+
+## Release Docs
+
+Generate release artifacts automatically when you cut a new version. Cadoo can create:
+
+- **Changelog** — structured, grouped section appended to your rolling `CHANGELOG.md` (or create a dedicated changelog PR).
+- **Release notes** — polished narrative for the GitHub/GitLab Release body, highlighting key changes.
+- **Blog post** — long-form announcement for your docs or blog site (optional, trigger on minor/major releases only).
+
+### Usage
+
+Use the CLI to generate release docs for a given tag range:
+
+```sh
+cadoo release-docs --pr-host github.com --repo myorg/myrepo --from v1.2.0 --to v1.3.0
+```
+
+Or for GitLab:
+
+```sh
+cadoo release-docs --pr-host gitlab.com --repo mygroup/myproject --from v1.2.0 --to v1.3.0
+```
+
+### Configuration
+
+Add a `releaseDocs` section to your `.cadoo.yaml`:
+
+```yaml
+releaseDocs:
+  enabled: true
+  trigger: release                    # release | tag | manual
+
+  artifacts:
+    changelog:
+      enabled: true
+      preset: keep-a-changelog        # keep-a-changelog | conventional | custom
+      file: CHANGELOG.md
+    releaseNotes:
+      enabled: true
+      when: always                    # always | minor-major | major
+      tone: concise                   # concise | detailed | marketing
+    blog:
+      enabled: false                  # opt-in
+      when: minor-major
+
+  grouping:
+    source: conventional              # conventional | labels | llm
+    sections: [Features, Fixes, Performance, Breaking, Docs, Other]
+
+  publish:
+    releaseBody: true                 # update GitHub/GitLab release body
+    changelogPR: true                 # open PR with changelog entry
+    pages: { enabled: false }         # publish to docs branch (future)
+```
+
+Every artifact is idempotent — re-running with the same tag range edits existing comments and PRs in place instead of creating duplicates.
 
 ## Self-hosting
 
