@@ -9,6 +9,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -58,6 +59,13 @@ func buildRedocHTML(specBytes []byte, bundle []byte) ([]byte, error) {
 	return []byte(html), nil
 }
 
+// maxNodeDepth is the maximum recursion depth allowed in nodeToJSON.
+// This prevents a stack overflow from a deeply nested (or self-referential)
+// YAML document. libopenapi rejects recursive anchors before this code is
+// reached in normal operation, but this guard provides independent defense-in-
+// depth so buildRedocHTML is safe to call from any context (WR-01).
+const maxNodeDepth = 1000
+
 // yamlToJSON converts YAML bytes to JSON bytes with map keys sorted
 // lexicographically at every depth level.  This eliminates Go-map
 // non-determinism (Pitfall 2) so the HTML output is byte-identical
@@ -80,7 +88,7 @@ func yamlToJSON(specBytes []byte) ([]byte, error) {
 	}
 
 	var b strings.Builder
-	if err := nodeToJSON(node, &b); err != nil {
+	if err := nodeToJSON(node, &b, 0); err != nil {
 		return nil, fmt.Errorf("yamlToJSON: encode: %w", err)
 	}
 	return []byte(b.String()), nil
@@ -88,17 +96,25 @@ func yamlToJSON(specBytes []byte) ([]byte, error) {
 
 // nodeToJSON recursively encodes a yaml.Node into the supplied Builder,
 // sorting map keys at every MappingNode.
-func nodeToJSON(n *yaml.Node, b *strings.Builder) error {
+//
+// depth tracks the current recursion level. An error is returned when depth
+// exceeds maxNodeDepth, providing an independent stack-overflow guard (WR-01)
+// that does not rely on libopenapi's anchor/alias validation running first.
+func nodeToJSON(n *yaml.Node, b *strings.Builder, depth int) error {
+	if depth > maxNodeDepth {
+		return fmt.Errorf("nodeToJSON: document exceeds maximum nesting depth %d", maxNodeDepth)
+	}
+
 	// Resolve aliases: an AliasNode points to its anchor target.
 	if n.Kind == yaml.AliasNode {
-		return nodeToJSON(n.Alias, b)
+		return nodeToJSON(n.Alias, b, depth+1)
 	}
 
 	switch n.Kind {
 	case yaml.MappingNode:
-		return mappingToJSON(n, b)
+		return mappingToJSON(n, b, depth)
 	case yaml.SequenceNode:
-		return sequenceToJSON(n, b)
+		return sequenceToJSON(n, b, depth)
 	case yaml.ScalarNode:
 		return scalarToJSON(n, b)
 	default:
@@ -112,7 +128,7 @@ func nodeToJSON(n *yaml.Node, b *strings.Builder) error {
 // YAML mappings store key-value pairs as adjacent elements in Content:
 //
 //	Content[0] = key₀, Content[1] = value₀, Content[2] = key₁, …
-func mappingToJSON(n *yaml.Node, b *strings.Builder) error {
+func mappingToJSON(n *yaml.Node, b *strings.Builder, depth int) error {
 	// Collect (key-string, value-node) pairs.
 	type kv struct {
 		key string
@@ -145,7 +161,7 @@ func mappingToJSON(n *yaml.Node, b *strings.Builder) error {
 		}
 		b.Write(keyJSON)
 		b.WriteByte(':')
-		if err := nodeToJSON(p.val, b); err != nil {
+		if err := nodeToJSON(p.val, b, depth+1); err != nil {
 			return err
 		}
 	}
@@ -154,13 +170,13 @@ func mappingToJSON(n *yaml.Node, b *strings.Builder) error {
 }
 
 // sequenceToJSON encodes a YAML sequence (array) to JSON.
-func sequenceToJSON(n *yaml.Node, b *strings.Builder) error {
+func sequenceToJSON(n *yaml.Node, b *strings.Builder, depth int) error {
 	b.WriteByte('[')
 	for i, child := range n.Content {
 		if i > 0 {
 			b.WriteByte(',')
 		}
-		if err := nodeToJSON(child, b); err != nil {
+		if err := nodeToJSON(child, b, depth+1); err != nil {
 			return err
 		}
 	}
@@ -171,21 +187,80 @@ func sequenceToJSON(n *yaml.Node, b *strings.Builder) error {
 // scalarToJSON encodes a YAML scalar to the appropriate JSON literal.
 // It respects the YAML tag so "true", "false", "null", and numeric scalars
 // are emitted as JSON literals, not as strings.
+//
+// For !!int and !!float, the raw n.Value is NOT written directly: YAML's
+// number grammar is a superset of JSON's (hex 0xAF, octal 0o17, binary 0b101,
+// underscores 1_000, .inf, -.inf, .nan are valid YAML but invalid JSON).
+// Instead, we decode through yaml.Node.Decode to obtain the Go numeric value,
+// then re-encode through encoding/json so the output is always valid JSON
+// (CR-01, D-05 deterministic-valid-output guarantee).
+//
+// Integer precision is preserved: integer-tagged scalars are decoded into int64
+// first; only values that do not fit int64 fall back to float64.
+//
+// Special float values (.inf / .nan) are not representable as JSON numbers; they
+// are emitted as JSON strings so the page still parses rather than silently
+// writing invalid JSON.
 func scalarToJSON(n *yaml.Node, b *strings.Builder) error {
 	// Resolve the effective tag (may be short "!!str" or long-form).
 	tag := n.ShortTag()
 	switch tag {
 	case "!!bool":
-		if n.Value == "true" || n.Value == "1" {
+		// yaml.v3 normalises !!bool values to "true" or "false".
+		if n.Value == "true" {
 			b.WriteString("true")
 		} else {
 			b.WriteString("false")
 		}
 	case "!!null":
 		b.WriteString("null")
-	case "!!int", "!!float":
-		// Emit the raw numeric value; yaml.v3 has already validated it.
-		b.WriteString(n.Value)
+	case "!!int":
+		// Decode into int64 to preserve integer precision (avoids float64 loss
+		// for large integers such as 2^53+1 that cannot be represented exactly).
+		var iv int64
+		if err := n.Decode(&iv); err != nil {
+			// Fallback: try float64 (handles large unsigned ints near MaxInt64).
+			var fv float64
+			if err2 := n.Decode(&fv); err2 != nil {
+				// Last resort: emit as a JSON string rather than invalid JSON.
+				enc, _ := json.Marshal(n.Value)
+				b.Write(enc)
+				return nil
+			}
+			enc, err2 := json.Marshal(fv)
+			if err2 != nil {
+				return fmt.Errorf("scalarToJSON: marshal int as float %q: %w", n.Value, err2)
+			}
+			b.Write(enc)
+			return nil
+		}
+		enc, err := json.Marshal(iv)
+		if err != nil {
+			return fmt.Errorf("scalarToJSON: marshal int %q: %w", n.Value, err)
+		}
+		b.Write(enc)
+	case "!!float":
+		// Decode into float64 through yaml.v3 so that non-JSON forms (hex,
+		// octal, underscores) are normalised to their numeric value.
+		var fv float64
+		if err := n.Decode(&fv); err != nil {
+			// Cannot decode (shouldn't happen for !!float) — emit as string.
+			enc, _ := json.Marshal(n.Value)
+			b.Write(enc)
+			return nil
+		}
+		// JSON does not support Inf or NaN — emit them as strings so the page
+		// still parses instead of silently producing invalid JSON.
+		if math.IsInf(fv, 0) || math.IsNaN(fv) {
+			enc, _ := json.Marshal(n.Value) // emit original YAML text as string
+			b.Write(enc)
+			return nil
+		}
+		enc, err := json.Marshal(fv)
+		if err != nil {
+			return fmt.Errorf("scalarToJSON: marshal float %q: %w", n.Value, err)
+		}
+		b.Write(enc)
 	default:
 		// All other scalars (strings, timestamps, etc.) → JSON string.
 		s, err := json.Marshal(n.Value)
