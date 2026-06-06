@@ -11,6 +11,7 @@ package defaults
 
 import (
 	"github.com/payamqorbanpour/cadoo/internal/releasedocs"
+	"github.com/payamqorbanpour/cadoo/internal/releasedocs/generators/apidocs"
 	"github.com/payamqorbanpour/cadoo/internal/releasedocs/generators/blog"
 	"github.com/payamqorbanpour/cadoo/internal/releasedocs/generators/changelog"
 	"github.com/payamqorbanpour/cadoo/internal/releasedocs/generators/releasenotes"
@@ -24,14 +25,19 @@ import (
 //  1. changelog.Generator   — deterministic CHANGELOG.md-style artifact.
 //  2. releasenotes.Generator — LLM-polished release narrative.
 //  3. blog.Generator        — LLM-authored blog-post announcement (minor/major only).
+//  4. apidocs.Generator     — spec + offline Redoc HTML + Markdown; emits three
+//     Filename-differentiated artifacts via GenerateMulti (multi-artifact path).
 //
 // The caller (Dispatcher.Generators) controls execution; disabled generators
-// are skipped by the dispatcher before Generate is called (D-08).
+// are skipped by the dispatcher before Generate is called (D-08). The apidocs
+// generator implements MultiGenerator so the dispatcher calls GenerateMulti
+// rather than the single-artifact Generate path.
 func DefaultGenerators() []releasedocs.Generator {
 	return []releasedocs.Generator{
 		changelog.New(),
 		releasenotes.New(),
 		blog.New(),
+		apidocs.New(),
 	}
 }
 

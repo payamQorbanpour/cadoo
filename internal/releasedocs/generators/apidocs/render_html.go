@@ -1,7 +1,8 @@
 // Package apidocs (render_html.go) implements the self-contained offline Redoc
-// HTML renderer. The Redoc standalone bundle is embedded at compile time via
-// go:embed so the generated HTML requires no CDN or network access (D-05).
-// Output is byte-identical given the same spec bytes and bundle (deterministic).
+// HTML renderer. The Redoc standalone bundle is embedded at compile time (via
+// the embed directive) so the generated HTML requires no CDN or network access
+// (D-05). Output is byte-identical given the same spec bytes and bundle
+// (deterministic).
 package apidocs
 
 import (

@@ -407,9 +407,10 @@ func TestGenerate_ParseFailure_Skips(t *testing.T) {
 // (fails libopenapi-validator) causes GenerateMulti to skip (nil, nil) (D-10).
 func TestGenerate_ValidationFailure_Skips(t *testing.T) {
 	t.Parallel()
-	t.Skip("TODO(03-04): activate once GenerateMulti calls validateSpec (Plan 04)")
 
-	// A spec that parses but fails OAS validation (missing required fields).
+	// A spec that parses but fails OAS validation (info.version is required
+	// by the OAS 3.0 schema but missing here). libopenapi-validator returns
+	// valid=false with a "Document does not pass validation" error.
 	badSpec := []byte(`openapi: 3.0.3
 info:
   title: Bad
