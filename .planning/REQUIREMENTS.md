@@ -1,43 +1,88 @@
-# Requirements: Cadoo — Release Docs
+# Requirements: Cadoo — MCP Server + Claude Code Plugin (v2.0)
 
-**Defined:** 2026-06-04
-**Core Value:** After a customer release, Cadoo auto-generates and publishes the configured release artifacts (changelog, release notes, blog, later API/OpenAPI docs) to the configured destinations — idempotently across re-runs, with per-artifact toggles honored.
+**Defined:** 2026-06-10
+**Core Value:** A developer working inside an AI assistant can invoke Cadoo's review tools from the conversation — review a local diff inline, or run a tool against a live PR/MR and post results back to GitHub/GHES/GitLab idempotently — without leaving the editor.
 
-> Source: `docs/superpowers/specs/2026-06-04-release-docs-design.md` (approved SPEC). These 6 requirements are SPEC-origin (no PRDs present); the SPEC's `.planning/intel/constraints.md` is the authoritative technical contract. Several requirements are delivered **incrementally** across phases — the Traceability table assigns each to its **first delivering phase**; later phases extend them (noted inline).
+> Source: `.planning/specs/2026-06-10-mcp-plugin-design.md` (approved SPEC) + `.planning/research/` (4-dimension research, HIGH confidence). Requirements MCP-03/04/05 and PR-03 are research-mandated hard constraints, not nice-to-haves: clients cache schemas, disconnect at ~60s without progress, break on stdout pollution, and `post=true` is a confused-deputy vector without an allowlist.
 
 ## v1 Requirements
 
-Requirements for the Release Docs milestone. Each maps to roadmap phases.
+Requirements for the MCP Server + Claude Code Plugin milestone. Each maps to roadmap phases.
 
-### Release Docs
+### MCP Server Core
 
-- [ ] **REQ-release-artifact-generation**: After a release, Cadoo generates release artifacts — changelog section, polished release notes, PR blog post, and (later) API docs + OpenAPI — from the commits/PRs in the release range.
-  - Acceptance: changelog = grouped (Features/Fixes/Breaking/…) section appended to a rolling `CHANGELOG.md`; release notes = polished narrative for the Release body; blog = long-form announcement; API docs + OpenAPI derived from code (phase 3).
-  - Delivery: changelog + release-notes in Phase 1; blog in Phase 2; api-docs/openapi in Phase 3.
+- [ ] **MCP-01**: Developer can connect an MCP client (Claude Code, Cursor, Claude Desktop) to `cadoo-mcp` over stdio and list the advertised Cadoo tools.
+  - Acceptance: `initialize` → `tools/list` → `tools/call` round-trips against a real client; built on `github.com/modelcontextprotocol/go-sdk` (fallback: minimal hand-rolled stdio server if the SDK proves unsuitable at plan time).
 
-- [ ] **REQ-per-artifact-toggles**: Per-artifact toggles and conditions — every artifact has its own `enabled` plus a `when:` condition keyed off the computed semver bump.
-  - Acceptance: changelog can run every release while blog runs only on minor/major; `Generator.Enabled(cfg, bump)` gates execution; the dispatcher never runs a disabled generator.
+- [ ] **MCP-02**: User can configure which tools are advertised (enable/disable); default core set is `review`, `describe`, `improve`, `ask`.
+  - Acceptance: disabled tools are absent from `tools/list`; calling one anyway returns a tool-not-found error. Default-4 keeps Cadoo under Cursor's ~40-tool ceiling.
 
-- [ ] **REQ-configurable-templates**: Two configurability layers — presets out of the box, custom override template files for full control.
-  - Acceptance: presets (`preset:`, `grouping.source`, `tone:`) work with no template authoring; any artifact may set `template:` (Go `text/template`, loaded from the tag tree) overriding the preset; templates receive the `ReleaseContext` plus the grouped change model; defaults to embedded preset templates in `internal/releasedocs/template`.
+- [ ] **MCP-03**: Tool input schemas are strict (enums, required fields, URL format) so clients cannot hallucinate arguments.
+  - Acceptance: `target` is an enum (`pr`|`local`); `url` required iff `target=pr`; unknown fields rejected; schema derived from Go structs (SDK inference).
 
-- [x] **REQ-release-docs-idempotency**: Idempotent across re-runs/resyncs (re-tagging, edited release) — edit-in-place, no duplicates.
-  - Acceptance: running the dispatcher twice over the same range edits the release body (not duplicated), keeps a single changelog PR, and uses stable pages paths; works both DB-backed and via stateless marker reconstruction (CLI/CI mode).
-  - Delivery: stateless/marker mode in Phase 1; DB-backed state table + migration in Phase 2.
+- [ ] **MCP-04**: Long-running tool calls emit MCP progress notifications so clients don't time out.
+  - Acceptance: a review exceeding the client's default timeout (~60s) completes successfully in Claude Code because progress heartbeats are emitted at pipeline checkpoints; `deep_review` stays out of the default tool set.
 
-- [ ] **REQ-configurable-trigger**: Trigger configurable per repo — published Release event by default, optionally tag push, plus a manual CLI/CI entry point.
-  - Acceptance: default `release` (webhook on GitHub `release: published` / GitLab release → enqueues `ReleaseJob`); optional `tag` (`v*` push filtered by `tagPattern`); manual `cadoo release-docs --repo … --from vX --to vY` runs stateless via the same dispatcher; if `releaseDocs.trigger` excludes the event kind, the webhook no-ops early.
-  - Delivery: manual CLI/CI entry point in Phase 1; release/tag webhook ingestion in Phase 2.
+- [ ] **MCP-05**: All logging goes to stderr; stdout carries only JSON-RPC frames.
+  - Acceptance: no code path (including go-github/go-gitlab and any logger) writes non-protocol bytes to stdout; verified by a framing round-trip test with logging enabled.
 
-- [ ] **REQ-publish-destinations**: Publish artifacts to the Release body, to `CHANGELOG.md` via PR, and to a docs branch / GitHub Pages.
-  - Acceptance: `releasebody` upserts/updates the Release body inside Cadoo markers (preserving user content); `changelogpr` opens/updates a single PR prepending the new `CHANGELOG.md` section; `pages` commits rendered artifacts to a configured branch/dir with deterministic paths.
-  - Delivery: `releasebody` + `changelogpr` in Phase 1; `pages` in Phase 2.
+- [ ] **MCP-06**: User can configure tokens/endpoints via config file + env vars with documented precedence; token values are never logged.
+  - Acceptance: precedence is per-invocation args → env vars → config file; `GITHUB_TOKEN`/`GITLAB_TOKEN`/`LITELLM_API_KEY` honored; redaction verified in error paths.
+
+### Local Review
+
+- [ ] **LOCAL-01**: User can review working-tree/staged changes (`target=local`) and get findings returned inline.
+  - Acceptance: `cadoo_review` with no `url` diffs the working tree, packs via `contextengine`, runs the tool, and returns rendered markdown in the MCP response.
+
+- [ ] **LOCAL-02**: User can review an arbitrary ref range (`range: A..B`).
+  - Acceptance: `range: "HEAD~3..HEAD"` reviews exactly those commits' diff; invalid refs return a clear error.
+
+- [ ] **LOCAL-03**: Local reviews post nothing to any VCS — only the LLM call leaves the machine.
+  - Acceptance: no `vcs.Provider` network calls in the `target=local` path; verified by a test with a panicking provider stub.
+
+### Live PR/MR Review
+
+- [ ] **PR-01**: User can run a tool against a PR/MR URL with results returned inline (dry-run is the default).
+  - Acceptance: `target=pr, post=false` (default) fetches the PR, runs the tool, returns rendered results; nothing is posted.
+
+- [ ] **PR-02**: User can opt in to `post=true` — posting is idempotent with the webhook and CI paths (no duplicate comments, same wrapper markers).
+  - Acceptance: a PR reviewed alternately via webhook, `cadoo ci`, and MCP produces one consolidated comment edited in place; inline findings dedup via `PriorReviewReader` + `<!-- cadoo:fp … -->` fingerprints.
+
+- [ ] **PR-03**: `post=true` is gated by an `allowed_repos` allowlist and URL host validation.
+  - Acceptance: posting to a repo not on the allowlist fails closed with a config hint; URL host must match the configured providers (confused-deputy defense).
+
+- [ ] **PR-04**: GitHub.com, GHES, and GitLab PR/MR URLs all resolve to the correct provider.
+  - Acceptance: `github.com/...`, configured GHES host, and `gitlab.com`/self-managed MR URLs each route to the right `vcs.Provider`; unknown hosts rejected.
+
+### Connected Mode
+
+- [ ] **CONN-01**: User can point `cadoo-mcp` at a `cadoo-api` deployment so reviews include KB + learnings.
+  - Acceptance: with `api-url` set, tool calls are forwarded to the backend and results include KB/learnings context; without it, embedded mode runs (no silent fallback between modes).
+
+- [ ] **CONN-02**: `learn`/`unlearn` are advertised only in connected mode.
+  - Acceptance: embedded-mode `tools/list` never includes them; connected-mode does (when enabled by config).
+
+- [ ] **CONN-03**: `cadoo-api` gains a synchronous tool-run endpoint with auth and rate limiting.
+  - Acceptance: endpoint authenticates the caller, enforces rate limits, survives long reviews (streaming/chunked progress — strategy decided at phase planning), carries `org_id` throughout.
+
+### Plugin & Distribution
+
+- [ ] **PLUG-01**: Claude Code user can install the Cadoo plugin; `/cadoo:review` with no args reviews the working tree.
+  - Acceptance: `plugins/claude/` ships `.claude-plugin/plugin.json`, `.mcp.json` (stdio server registration, env passthrough for tokens), and slash commands for the core tools.
+
+- [ ] **PLUG-02**: Cursor and Claude Desktop setup is documented (manual MCP config).
+  - Acceptance: docs verified end-to-end against a scratch GitHub repo and a GitLab project.
+
+- [ ] **PLUG-03**: GoReleaser ships `cadoo-mcp` as the sixth binary.
+  - Acceptance: `make build` produces `bin/cadoo-mcp`; release pipeline publishes it alongside the existing five.
 
 ## v2 Requirements
 
 Deferred beyond this milestone. Tracked but not in the current roadmap.
 
-(None defined yet — open items in `.planning/intel/context.md`, e.g. `llm` grouping in phase 1 vs deferred, will be resolved during phase planning.)
+- **Real-time/continuous review while editing** — editor-hook territory (e.g. Claude Code PostToolUse hooks invoking the same MCP tools); revisit after v2.0 ships.
+- **HTTP/SSE transport for `cadoo-mcp`** — structural fix for stdio process proliferation under parallel agents; stdio + advisory lock suffices for v2.0.
+- **OAuth flows for VCS auth** — PATs only this milestone.
 
 ## Out of Scope
 
@@ -45,34 +90,25 @@ Explicitly excluded. Documented to prevent scope creep.
 
 | Feature | Reason |
 |---------|--------|
-| Extending `tools.Tool` / `tools.Input` / `tools.Result` | Those types are PR-diff/inline-comment shaped; Release Docs is a parallel subsystem |
+| Native VS Code / JetBrains extensions | Future consumers of the same binary; not this milestone |
+| Modifying `tools.Tool` / `tools.Input` / `tools.Result` | The MCP server adapts *to* those interfaces, not the reverse |
+| Extending `internal/mcp` for the server | That package is an MCP *client* (Phase 6 work); server is `internal/mcpserver` |
+| Advertising all 13 tools by default | Cursor's ~40-tool ceiling across servers; configurable instead |
+| Multi-tenant hosting of `cadoo-mcp` itself | Runs per-developer; connected mode reaches the multi-tenant backend via `cadoo-api` |
 | New LLM provider code paths in Go | Multi-provider routing stays in the LiteLLM sidecar |
-| API docs for arbitrary languages | Phase 3 starts with a narrow, well-supported framework set |
-| Blog publish destinations beyond pages (e.g. dev.to) | Out of scope for this milestone |
-| Single-tenant shortcuts | `org_id` carried throughout; self-host is a degenerate single-org tenant |
 
 ## Traceability
 
-Each requirement is assigned to its **first delivering phase**. Requirements marked "(extends)" gain additional artifacts/modes in later phases (see phase requirement lists in ROADMAP.md).
+Filled by roadmap creation. Each requirement is assigned to its first delivering phase.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| REQ-release-artifact-generation | Phase 1 | ✓ Partial — changelog + release-notes delivered; blog (Phase 2), api-docs (Phase 3) |
-| REQ-per-artifact-toggles | Phase 1 | ✓ Delivered |
-| REQ-configurable-templates | Phase 1 | ✓ Delivered |
-| REQ-release-docs-idempotency | Phase 1 | ✓ Partial — stateless/marker mode delivered; DB-backed state (Phase 2) |
-| REQ-configurable-trigger | Phase 1 | ✓ Partial — CLI/CI entry point delivered; release/tag webhook (Phase 2) |
-| REQ-publish-destinations | Phase 1 | ✓ Partial — releasebody + changelogpr delivered; pages (Phase 2) |
+| (pending roadmap) | | |
 
 **Coverage:**
-- v1 requirements: 6 total
-- Mapped to phases: 6
-- Unmapped: 0 ✓
-
-**Incremental delivery (later-phase extensions):**
-- Phase 2 extends: REQ-release-artifact-generation (blog), REQ-release-docs-idempotency (DB-backed state), REQ-configurable-trigger (release/tag webhook), REQ-publish-destinations (pages).
-- Phase 3 extends: REQ-release-artifact-generation (api-docs/openapi).
+- v1 requirements: 19 total
+- Mapped to phases: 0 (pending roadmap)
+- Unmapped: 19
 
 ---
-*Requirements defined: 2026-06-04*
-*Last updated: 2026-06-05 — Phase 1 complete, traceability updated*
+*Requirements defined: 2026-06-10*
