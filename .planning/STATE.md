@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: milestone_complete
-stopped_at: Milestone complete (Phase 03 was final phase)
-last_updated: 2026-06-06T05:52:28.638Z
-last_activity: 2026-06-05 -- Phase 03 execution started
+milestone: v2.0
+milestone_name: MCP Server + Claude Code Plugin
+status: planning
+last_updated: "2026-06-10T15:12:19.220Z"
+last_activity: 2026-06-10
 progress:
-  total_phases: 3
-  completed_phases: 2
-  total_plans: 18
-  completed_plans: 18
-  percent: 67
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,12 +24,10 @@ See: .planning/PROJECT.md (updated 2026-06-04)
 
 ## Current Position
 
-Phase: 03
-Plan: Not started
-Status: Milestone complete
-Last activity: 2026-06-06
-
-Progress: [███████░░░] 69%
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-06-10 — Milestone v2.0 started
 
 ## Completed Phases
 

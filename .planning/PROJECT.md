@@ -2,11 +2,25 @@
 
 ## What This Is
 
-Cadoo is a multi-tenant AI code reviewer that posts inline review comments, summary comments, and check-runs to GitHub, GHES, and GitLab — feature-parity-targeted at Qodo Merge and CodeRabbit, shipped as both SaaS and self-host on one binary set (five `cmd/*` services, Postgres/pgvector, LiteLLM sidecar). The current milestone adds **Release Docs**: after a customer cuts a release, Cadoo automatically generates and publishes release artifacts (changelog, release notes, blog, and later API/OpenAPI docs) for *their* repository.
+Cadoo is a multi-tenant AI code reviewer that posts inline review comments, summary comments, and check-runs to GitHub, GHES, and GitLab — feature-parity-targeted at Qodo Merge and CodeRabbit, shipped as both SaaS and self-host on one binary set (five `cmd/*` services, Postgres/pgvector, LiteLLM sidecar). The current milestone adds an **MCP server + Claude Code plugin**: a sixth binary (`cadoo-mcp`) that exposes Cadoo's review tools to AI assistants (Claude Code, Claude Desktop, Cursor, any MCP client), for both local diff review and live PR/MR review.
 
 ## Core Value
 
-After a customer release, Cadoo auto-generates and publishes the configured release artifacts (changelog, release notes, blog, later API/OpenAPI docs) to the configured destinations (release body, `CHANGELOG.md` PR, docs branch/Pages) — idempotently across re-runs, with per-artifact toggles honored.
+A developer working inside an AI assistant can invoke Cadoo's review tools from the conversation — review a local diff inline, or run a tool against a live PR/MR and post results back to GitHub/GHES/GitLab idempotently — without leaving the editor.
+
+## Current Milestone: v2.0 MCP Server + Claude Code Plugin
+
+**Goal:** Expose Cadoo's review tools to AI assistants via a new `cadoo-mcp` MCP server binary and a Claude Code plugin.
+
+**Target features:**
+- `cmd/cadoo-mcp` — MCP server (stdio) exposing Cadoo tools as MCP tools, reusing the CI-mode stateless path
+- Local review (`target=local`) — working-tree / staged / ref-range diffs, results returned inline
+- Live PR/MR review (`target=pr`) — dry-run or idempotent post-back to GitHub/GHES/GitLab (same wrapper markers)
+- Configurable tool surface — enable/disable; default core set: review, describe, improve, ask
+- Connected mode — proxy through `cadoo-api` so KB + learnings apply (new sync tool endpoint)
+- Claude Code plugin (`plugins/claude/`) — manifest, `.mcp.json`, slash commands
+
+**Source spec:** `.planning/specs/2026-06-10-mcp-plugin-design.md` (approved).
 
 ## Requirements
 
@@ -20,34 +34,36 @@ The existing review pipeline ships separately and is the platform this builds on
 
 ### Active
 
-<!-- Current scope. Building toward these (Release Docs milestone). -->
+<!-- Current scope. Building toward these (MCP Server + Claude Code Plugin milestone). REQ-IDs defined in REQUIREMENTS.md. -->
 
-- [ ] **RELDOCS-GEN**: Auto-generate release artifacts (changelog, release notes, blog, later API/OpenAPI) after a release
-- [ ] **RELDOCS-TOGGLES**: Per-artifact `enabled` + `when:` conditions keyed off the computed semver bump
-- [ ] **RELDOCS-TEMPLATES**: Two configurability layers — presets out of the box, custom override templates for full control
-- [ ] **RELDOCS-IDEMPOTENT**: Idempotent across re-runs/resyncs (edit-in-place, no duplicates), DB-backed and stateless/marker modes
-- [ ] **RELDOCS-TRIGGER**: Configurable trigger per repo — release event (default), tag push (optional), manual CLI/CI
-- [ ] **RELDOCS-PUBLISH**: Publish to release body, `CHANGELOG.md` via PR, and docs branch / GitHub Pages
+- [ ] MCP server binary (`cadoo-mcp`, stdio transport) advertising Cadoo tools as MCP tools
+- [ ] Local diff review returned inline (working tree / staged / ref range)
+- [ ] Live PR/MR review — dry-run and idempotent post-back (GitHub, GHES, GitLab)
+- [ ] Configurable tool surface (enable/disable; safe default core set)
+- [ ] Connected mode via `cadoo-api` (KB + learnings; `learn`/`unlearn` exposure)
+- [ ] Claude Code plugin (manifest, `.mcp.json`, slash commands) + setup docs for Cursor/Claude Desktop
 
 ### Out of Scope
 
 <!-- Explicit boundaries. Includes reasoning to prevent re-adding. -->
 
-- Extending `tools.Tool` / `tools.Input` / `tools.Result` for release docs — those types are PR-diff/inline-comment shaped; Release Docs is a parallel subsystem (`internal/releasedocs`).
+- Real-time / continuous review while editing — MCP is request/response; file-watching belongs to editor hooks. Follow-up, not this milestone.
+- Native VS Code / JetBrains extensions — future consumers of the same `cadoo-mcp` binary.
+- Modifying `tools.Tool` / `tools.Input` / `tools.Result` — the MCP server adapts *to* those interfaces, not the reverse.
+- OAuth flows for VCS auth — PATs only this milestone (env vars / config / per-invocation).
+- Multi-tenant hosting of `cadoo-mcp` itself — it runs per-developer; connected mode reaches the multi-tenant backend via `cadoo-api`.
 - New LLM provider code paths in Go — all multi-provider routing stays in the LiteLLM sidecar.
-- API docs for *arbitrary* languages — phase 3 starts with a narrow, well-supported framework set.
-- Blog publish destinations beyond pages (e.g. dev.to) — out of scope for this milestone.
 - Single-tenant shortcuts — `org_id` is carried throughout; self-host is a degenerate single-org tenant.
 
 ## Context
 
 **Technical environment (grounded in `.planning/codebase/`):** Go 1.26, five binaries under `cmd/` (`cadoo-webhook`, `cadoo-worker`, `cadoo-api`, `cadoo-cli`, `cadoo-tunnel`). PostgreSQL 16 + pgvector. River (Postgres) job queue with an in-memory fallback when `DATABASE_URL` is unset (dual-mode). LLM access goes through a LiteLLM sidecar over an OpenAI-compatible HTTP API. VCS adapters live behind the `vcs.Provider` interface (`internal/vcs/github`, `internal/vcs/gitlab`).
 
-**Reused primitives:** Release Docs deliberately mirrors the review pipeline rather than extending it — reusing the orchestrator's `VCSPool`, the dual-mode queue, the LiteLLM gateway, and the marker-based idempotency pattern from CI-mode review (`PriorReviewReader`). The new subsystem is `internal/releasedocs`, parallel to `internal/orchestrator`.
+**Reused primitives (this milestone):** `cadoo-mcp` mirrors `cadoo-cli` CI-mode — stateless, no DB, dedup reconstructed via `PriorReviewReader` + `<!-- cadoo:fp … -->` markers, consolidated comment format from `internal/orchestrator/consolidate.go`, diffs packed via `internal/contextengine`, LLM through the LiteLLM gateway. The MCP *server* lives in a new `internal/mcpserver` package — the existing `internal/mcp` package is an MCP *client* (Cadoo consuming external servers) and stays untouched.
 
 **Conventions to honor:** `.cadoo.yaml` is loaded from the release tag's tree (consistent with the existing "config from head, never main" rule). Exported symbols need docstrings (`exported` revive rule). `goimports` local-prefix grouping (`github.com/payamqorbanpour/cadoo`). `make ci` (vet + test + build) must stay green; any new migration must round-trip `up → down → up`.
 
-**Source spec:** `docs/superpowers/specs/2026-06-04-release-docs-design.md` (approved design). Synthesized intel at `.planning/intel/` (the SPEC's `constraints.md` is the authoritative technical contract).
+**Source spec:** `.planning/specs/2026-06-10-mcp-plugin-design.md` (approved design for v2.0). Prior milestone spec: `docs/superpowers/specs/2026-06-04-release-docs-design.md`.
 
 ## Constraints
 
@@ -71,7 +87,28 @@ The existing review pipeline ships separately and is the platform this builds on
 | Changelog deterministic-first; LLM only polishes | Reproducible (golden-file) output with LLM off | — Pending (proposed) |
 | `releaseDocs` config loaded from the release tag's tree | Consistent with "config from head, never main" | — Pending (proposed) |
 | Marker + stored-state idempotency (DB-backed + stateless CLI) | Mirrors review pipeline; CLI/CI runs without a DB | — Pending (proposed) |
-| Three-phase delivery: CLI → webhook+state → API docs | Ship dogfoodable CLI value first; defer webhook/state and OpenAPI complexity | — Pending (proposed) |
+| Three-phase delivery: CLI → webhook+state → API docs | Ship dogfoodable CLI value first; defer webhook/state and OpenAPI complexity | ✓ Good (v1.0 shipped this way) |
+| MCP server in new `internal/mcpserver`, separate from `internal/mcp` client | Server and client are different concerns; client (Phase 6 work) stays untouched | — Pending (proposed) |
+| Use official `modelcontextprotocol/go-sdk` for protocol layer | Avoid hand-rolling JSON-RPC; fallback to minimal stdio server if SDK unsuitable | — Pending (proposed) |
+| Embedded mode default, connected mode opt-in via `api-url` | Zero-infra setup for individual devs; backend only when KB/learnings wanted | — Pending (proposed) |
+| Three-phase delivery: local review → live PR → connected mode | Dogfoodable on Cadoo's own repo from phase 1; each phase releasable | — Pending (proposed) |
+
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd-transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd:complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
 
 ---
-*Last updated: 2026-06-06 — Phase 03 complete (API docs / OpenAPI: committed-spec ingestion + offline Redoc HTML + deterministic Markdown → pages). Release Docs milestone (Phases 1–3) complete.*
+*Last updated: 2026-06-10 — Milestone v2.0 (MCP Server + Claude Code Plugin) started.*
