@@ -99,16 +99,32 @@ Explicitly excluded. Documented to prevent scope creep.
 
 ## Traceability
 
-Filled by roadmap creation. Each requirement is assigned to its first delivering phase.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (pending roadmap) | | |
+| MCP-01 | Phase 4 | Pending |
+| MCP-02 | Phase 4 | Pending |
+| MCP-03 | Phase 4 | Pending |
+| MCP-04 | Phase 4 | Pending |
+| MCP-05 | Phase 4 | Pending |
+| MCP-06 | Phase 4 | Pending |
+| LOCAL-01 | Phase 4 | Pending |
+| LOCAL-02 | Phase 4 | Pending |
+| LOCAL-03 | Phase 4 | Pending |
+| PLUG-01 | Phase 4 | Pending |
+| PLUG-03 | Phase 4 | Pending |
+| PR-01 | Phase 5 | Pending |
+| PR-02 | Phase 5 | Pending |
+| PR-03 | Phase 5 | Pending |
+| PR-04 | Phase 5 | Pending |
+| PLUG-02 | Phase 5 | Pending |
+| CONN-01 | Phase 6 | Pending |
+| CONN-02 | Phase 6 | Pending |
+| CONN-03 | Phase 6 | Pending |
 
 **Coverage:**
 - v1 requirements: 19 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 19
+- Mapped to phases: 19
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-06-10*
