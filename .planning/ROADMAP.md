@@ -165,10 +165,19 @@ Plans:
   3. A diagram type that cannot be derived for the repo is skipped with a logged reason, without failing the changelog/release-notes/blog/api-docs artifacts in the same release-docs run.
   4. Diagram generation is deterministic-first and reproducible with the LLM disabled (golden-file testable), consistent with the changelog/release-notes generators; any LLM use is nil-tolerant and only refines.
   5. The flow is dogfooded end-to-end on Cadoo's own repository.
-**Plans**: TBD
-**UI hint**: no
+**Plans**: 3 plans
 
-> **Design deferred to `/gsd:discuss-phase 7`:** diagram rendering format (Mermaid / PlantUML / Graphviz-DOT / Structurizr), how diagrams are *derived* from the repo (static AST analysis vs. existing diagram-source files vs. LLM-from-code), `.cadoo.yaml` schema for the `diagrams` artifact + per-type selection, and which publish destinations beyond pages.
+Plans:
+**Wave 1**
+- [ ] 07-01-PLAN.md — Contract/config layer: KindDiagrams const + DiagramsConfig (5 per-type path lists + family gate) + .cadoo.yaml.example doc
+
+**Wave 2** *(blocked on 07-01)*
+- [ ] 07-02-PLAN.md — diagrams generator package: Mermaid keyword sniff + fixed fence wrapper + GenerateMulti (ordered-slice, graceful skip) + golden tests
+
+**Wave 3** *(blocked on 07-02)*
+- [ ] 07-03-PLAN.md — DefaultGenerators registration + pages path/idempotency tests + dogfood Mermaid sources (SC-5) + human-verify checkpoint
+
+> **Design resolved in `/gsd:discuss-phase 7` (see 07-CONTEXT.md, D-01..D-10):** render committed Mermaid sources (no derivation, no LLM); per-type explicit config paths (no tree listing); fixed ` ```mermaid ` fence wrapper (no rendering runtime); pages-only deterministic idempotent paths `releases/<tag>/diagrams/<type>/<name>.md`; per-source graceful skip via `(nil,nil)`.
 
 ## Progress
 
@@ -180,7 +189,7 @@ Active milestone v1.1 runs first: Phase 7. Deferred milestone v2.0 follows in nu
 | 1. Generators + Publishers + CLI | v1.0 | 7/7 | Complete | 2026-06-05 |
 | 2. Webhook Auto-Trigger + State | v1.0 | 6/6 | Complete | 2026-06-05 |
 | 3. API Docs / OpenAPI | v1.0 | 5/5 | Complete | 2026-06-06 |
-| 7. Release-Docs Engineering Diagrams | v1.1 | 0/TBD | Active — discussing | - |
+| 7. Release-Docs Engineering Diagrams | v1.1 | 0/3 | Active — planned | - |
 | 4. Embedded Local Review + Plugin | v2.0 | 0/TBD | Deferred | - |
 | 5. Live PR/MR Review | v2.0 | 0/TBD | Deferred | - |
 | 6. Connected Mode | v2.0 | 0/TBD | Deferred | - |
