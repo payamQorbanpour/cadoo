@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Release-Docs Engineering Diagrams
-status: executing
-stopped_at: Phase 7 context gathered
+status: phase-complete
+stopped_at: Completed 07-03-PLAN.md (Phase 7 done)
 last_updated: "2026-06-13T18:29:45.564Z"
 last_activity: 2026-06-13
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
-  percent: 0
+  completed_plans: 3
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 
 ## Current Position
 
-Phase: 07 (engineering-diagrams) — EXECUTING
+Phase: 07 (engineering-diagrams) — COMPLETE
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete (all 3 plans shipped; v1.1 milestone done)
 Last activity: 2026-06-13
 
-Progress: [███████░░░] 67%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -51,6 +51,7 @@ Progress: [███████░░░] 67%
 *Updated after each plan completion*
 | Phase 07 P01 | 6 min | 3 tasks | 3 files |
 | Phase 07 P02 | 12 min | 3 tasks | 11 files |
+| Phase 07 P03 | ~30 min | 4 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,7 @@ From PROJECT.md Key Decisions table (v2.0 design choices, PROPOSED — not yet l
 - [Phase 07]: Diagrams gated by one inline ArtifactConfig family gate, no per-type toggles — D-07
 - [Phase ?]: [Phase 07]: Dependency Mermaid keyword set adopted as {flowchart, graph, erDiagram} (RESEARCH Q3)
 - [Phase ?]: [Phase 07]: diagrams.Generator emits one Artifact per valid Mermaid source; ordered-slice type iteration; family-level (nil,nil) skip on absent FileFetcher
+- [Phase 07]: diagrams generator registered in DefaultGenerators() (enabled:false default); pages publisher routes KindDiagrams sub-paths idempotently with NO publisher code change — proven by test, not new branches
 
 ### Pending Todos
 
@@ -87,5 +89,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-06-13T18:29:40.758Z
-Stopped at: Phase 7 context gathered
+Stopped at: Completed 07-03-PLAN.md (Phase 7 complete)
 Resume file: None
