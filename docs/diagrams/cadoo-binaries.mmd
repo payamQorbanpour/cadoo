@@ -1,0 +1,33 @@
+classDiagram
+    class Dispatcher {
+        +Run(ctx, ToolJob) error
+        -VCSPool pool
+        -Registry tools
+    }
+
+    class cadoo_webhook {
+        +verify signatures
+        +enqueue ToolJob
+    }
+    class cadoo_worker {
+        +consume River queue
+        +run review pipeline
+    }
+    class cadoo_api {
+        +REST API
+        +dashboard backend
+    }
+    class cadoo_cli {
+        +local pre-commit review
+        +ci --pr / --mr (stateless)
+    }
+    class cadoo_tunnel {
+        +reverse tunnel agent
+        +reach private GHES/GitLab
+    }
+
+    cadoo_webhook ..> Dispatcher : enqueues ToolJob
+    cadoo_worker ..> Dispatcher : drives Run
+    cadoo_cli ..> Dispatcher : drives Run (CI-mode)
+    cadoo_api --> cadoo_worker : observes/serves results
+    cadoo_tunnel ..> cadoo_webhook : forwards inbound webhooks
