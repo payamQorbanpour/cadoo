@@ -14,16 +14,16 @@
 - [x] **DIAG-01**: User can enable a `diagrams` release-docs artifact and choose which diagram types are produced (sequence, dependency, state, flowchart, class) via `.cadoo.yaml`.
   - Acceptance: a per-type selection in the `releaseDocs.diagrams` config block; an unselected type is never generated; the artifact respects the existing `enabled:` / `when:` toggles like other release-docs artifacts.
 
-- [ ] **DIAG-02**: For each selected diagram type, Cadoo derives a diagram from the repository at release time.
+- [x] **DIAG-02**: For each selected diagram type, Cadoo derives a diagram from the repository at release time.
   - Acceptance: each selected type yields a rendered diagram artifact generated from the repo's code/structure (derivation strategy decided at phase planning); a type with no derivable content is handled per DIAG-04.
 
 - [ ] **DIAG-03**: Generated diagrams are published to pages at deterministic paths, idempotent across re-runs.
   - Acceptance: diagrams land at deterministic paths (e.g. `docs/releases/vX.Y.Z/diagrams/<type>.*`); re-running the release overwrites the same paths with no duplicates, consistent with the api-docs / pages publisher.
 
-- [ ] **DIAG-04**: Per-type graceful degradation — an underivable type is skipped with a logged reason, never failing the rest of the run.
+- [x] **DIAG-04**: Per-type graceful degradation — an underivable type is skipped with a logged reason, never failing the rest of the run.
   - Acceptance: a diagram type that cannot be produced is skipped with a logged reason; changelog/release-notes/blog/api-docs artifacts in the same run still complete.
 
-- [ ] **DIAG-05**: Diagram generation is deterministic-first and reproducible with the LLM disabled.
+- [x] **DIAG-05**: Diagram generation is deterministic-first and reproducible with the LLM disabled.
   - Acceptance: with LLM off, output is reproducible (golden-file testable), consistent with the changelog/release-notes generators; any LLM use is nil-tolerant and only refines wording/layout.
 
 ### Traceability (v1.1)
@@ -31,10 +31,10 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | DIAG-01 | Phase 7 | Complete |
-| DIAG-02 | Phase 7 | Pending |
+| DIAG-02 | Phase 7 | Complete |
 | DIAG-03 | Phase 7 | Pending |
-| DIAG-04 | Phase 7 | Pending |
-| DIAG-05 | Phase 7 | Pending |
+| DIAG-04 | Phase 7 | Complete |
+| DIAG-05 | Phase 7 | Complete |
 
 **Coverage (v1.1):** 5 requirements, all mapped to Phase 7, 0 unmapped.
 
