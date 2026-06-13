@@ -45,15 +45,13 @@ A developer working inside an AI assistant can invoke Cadoo's review tools from 
 <!-- Shipped and confirmed valuable. -->
 
 - **Release Docs milestone (Phases 1–3) complete** (2026-06-06): changelog + release notes + blog generators, release-body/CHANGELOG-PR/pages publishers, webhook auto-trigger + DB state, and code API docs / OpenAPI (committed-spec ingestion → offline Redoc HTML + deterministic Markdown, published to pages). Idempotent across re-runs; per-artifact toggles honored. Validated in Phase 3: API Docs / OpenAPI.
+- **v1.1 Release-Docs Engineering Diagrams (Phase 7) complete** (2026-06-13): deterministic, LLM-free `diagrams` generator (`internal/releasedocs/generators/diagrams/`) — fetches user-configured committed Mermaid sources at the release tag, sniffs per-type keywords, wraps in a fixed `mermaid` fence, emits one markdown page per source at `diagrams/<type>/<base>.md`; registered in `DefaultGenerators()` and routed idempotently through the pages publisher. Per-type selection via `releaseDocs.diagrams`; graceful per-source skip on missing/non-Mermaid sources. Dogfooded on Cadoo's own repo (SC-5). DIAG-01..05 satisfied. Validated in Phase 7: Engineering Diagrams.
 
 The existing review pipeline ships separately and is the platform this builds on.
 
 ### Active
 
-<!-- Current scope. v1.1 diagrams is active; v2.0 MCP items are deferred. REQ-IDs defined in REQUIREMENTS.md. -->
-
-**v1.1 — Release-Docs Engineering Diagrams (active):**
-- [ ] `diagrams` release-docs artifact generating user-selected engineering diagrams (sequence, dependency, state, flowchart, class) from the repo, published to pages idempotently (DIAG-01..05)
+<!-- Current scope. v1.1 shipped; v2.0 MCP items are deferred. REQ-IDs defined in REQUIREMENTS.md. -->
 
 **v2.0 — MCP Server + Claude Code Plugin (deferred):**
 - [ ] MCP server binary (`cadoo-mcp`, stdio transport) advertising Cadoo tools as MCP tools
@@ -131,4 +129,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-13 — Milestone v1.1 (Release-Docs Engineering Diagrams) opened as active; v2.0 (MCP Server + Claude Code Plugin) deferred (0 plans started). Previous update 2026-06-10.*
+*Last updated: 2026-06-13 — Milestone v1.1 (Release-Docs Engineering Diagrams) SHIPPED: Phase 7 complete (3/3 plans, verification passed 9/9). v2.0 (MCP Server + Claude Code Plugin) remains deferred (0 plans started). Previous update 2026-06-13.*
