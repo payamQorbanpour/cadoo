@@ -14,6 +14,7 @@ import (
 	"github.com/payamqorbanpour/cadoo/internal/releasedocs/generators/apidocs"
 	"github.com/payamqorbanpour/cadoo/internal/releasedocs/generators/blog"
 	"github.com/payamqorbanpour/cadoo/internal/releasedocs/generators/changelog"
+	"github.com/payamqorbanpour/cadoo/internal/releasedocs/generators/diagrams"
 	"github.com/payamqorbanpour/cadoo/internal/releasedocs/generators/releasenotes"
 	"github.com/payamqorbanpour/cadoo/internal/releasedocs/publishers/changelogpr"
 	"github.com/payamqorbanpour/cadoo/internal/releasedocs/publishers/pages"
@@ -27,17 +28,23 @@ import (
 //  3. blog.Generator        — LLM-authored blog-post announcement (minor/major only).
 //  4. apidocs.Generator     — spec + offline Redoc HTML + Markdown; emits three
 //     Filename-differentiated artifacts via GenerateMulti (multi-artifact path).
+//  5. diagrams.Generator    — deterministic, LLM-free engineering diagrams;
+//     wraps each configured Mermaid source in a fixed fence and emits one
+//     Filename-differentiated artifact per source via GenerateMulti. Gated by
+//     enabled:false by default (D-07), so existing release-docs runs are
+//     unaffected until a user opts in.
 //
 // The caller (Dispatcher.Generators) controls execution; disabled generators
 // are skipped by the dispatcher before Generate is called (D-08). The apidocs
-// generator implements MultiGenerator so the dispatcher calls GenerateMulti
-// rather than the single-artifact Generate path.
+// and diagrams generators implement MultiGenerator so the dispatcher calls
+// GenerateMulti rather than the single-artifact Generate path.
 func DefaultGenerators() []releasedocs.Generator {
 	return []releasedocs.Generator{
 		changelog.New(),
 		releasenotes.New(),
 		blog.New(),
 		apidocs.New(),
+		diagrams.New(), // Phase 7
 	}
 }
 
