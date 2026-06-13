@@ -123,6 +123,25 @@ releaseDocs:
                             # Set to a specific path (e.g. "docs/api/openapi.yaml") to skip
                             # fallback discovery and fetch exactly that file at the release tag.
 
+    # Engineering-diagrams artifact family — renders committed Mermaid sources,
+    # one markdown page per source (each source wrapped in a ```mermaid fence),
+    # published to pages at releases/<tag>/diagrams/<type>/<name>.md. A missing or
+    # non-Mermaid source is skipped with a logged reason without failing its
+    # siblings or the rest of the run (D-08). All output is gated together by the
+    # single enabled + when: condition below (D-07).
+    #
+    # Pages-rendering nuance: a ```mermaid fence renders natively on github.com's
+    # file view and in release bodies, but a Jekyll- or GitLab-Pages *served* site
+    # needs a client-side mermaid include to render the fence (deferred).
+    diagrams:
+      enabled: false
+      when: always          # default is "always" — runs on every release (D-08)
+      sequence: []          # Mermaid sources using sequenceDiagram
+      dependency: []        # Mermaid sources using graph / flowchart / erDiagram
+      state: []             # Mermaid sources using stateDiagram
+      flowchart: []         # Mermaid sources using flowchart / graph
+      class: []             # Mermaid sources using classDiagram
+
   publish:
     releaseBody:
       enabled: false
