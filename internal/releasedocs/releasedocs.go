@@ -33,6 +33,13 @@ const (
 	// The apidocs generator implements the MultiGenerator interface, which the
 	// dispatcher prefers over the single-artifact Generator.Generate path.
 	KindAPIDocs ArtifactKind = "apidocs"
+	// KindDiagrams identifies the engineering-diagrams generator family. A single
+	// GenerateMulti call emits one markdown-page Artifact per resolved Mermaid
+	// source, each differentiated by its Filename field
+	// (e.g. "diagrams/sequence/login.md"). The diagrams generator implements the
+	// MultiGenerator interface, which the dispatcher prefers over the
+	// single-artifact Generator.Generate path.
+	KindDiagrams ArtifactKind = "diagrams"
 )
 
 // PublishTarget identifies where a publisher delivers artifacts.
