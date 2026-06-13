@@ -4,13 +4,13 @@ milestone: v1.1
 milestone_name: Release-Docs Engineering Diagrams
 status: executing
 stopped_at: Phase 7 context gathered
-last_updated: "2026-06-13T18:17:17.370Z"
-last_activity: 2026-06-13 -- Phase 07 planning complete
+last_updated: "2026-06-13T18:23:59.626Z"
+last_activity: 2026-06-13
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 3
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-10)
 
 **Core value:** A maintainer can publish auto-generated software-engineering diagrams (sequence, dependency, state, flowchart, class) as part of release docs, choosing which diagram types to ship per repo.
-**Current focus:** Phase 7 — Release-Docs Engineering Diagrams (milestone v1.1)
+**Current focus:** Phase 07 — engineering-diagrams
 
 ## Current Position
 
-Phase: 7 (Release-Docs Engineering Diagrams) — milestone v1.1 (single phase)
-Plan: — of — (not yet planned)
+Phase: 07 (engineering-diagrams) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-06-13 -- Phase 07 planning complete
+Last activity: 2026-06-13
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [███░░░░░░░] 33%
 
 ## Performance Metrics
 
@@ -49,6 +49,7 @@ Progress: [░░░░░░░░░░] 0%
 | 06 — connected-mode | TBD | - | - |
 
 *Updated after each plan completion*
+| Phase 07 P01 | 6 min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -61,6 +62,8 @@ From PROJECT.md Key Decisions table (v2.0 design choices, PROPOSED — not yet l
 - Embedded mode default; connected mode opt-in via `--api-url`.
 - `cadoo-mcp` mirrors `cadoo-cli` CI-mode: stateless, no DB, dedup via `PriorReviewReader`.
 - `post=true` protected by `allowed_repos` allowlist + URL host validation (confused-deputy defense).
+- [Phase 07]: Diagram types are FIXED (sequence, dependency, state, flowchart, class) — D-04
+- [Phase 07]: Diagrams gated by one inline ArtifactConfig family gate, no per-type toggles — D-07
 
 ### Pending Todos
 
@@ -80,6 +83,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-13T17:53:09.043Z
+Last session: 2026-06-13T18:23:20.373Z
 Stopped at: Phase 7 context gathered
-Resume file: .planning/phases/07-engineering-diagrams/07-CONTEXT.md
+Resume file: None

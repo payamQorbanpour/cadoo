@@ -169,7 +169,7 @@ Plans:
 
 Plans:
 **Wave 1**
-- [ ] 07-01-PLAN.md — Contract/config layer: KindDiagrams const + DiagramsConfig (5 per-type path lists + family gate) + .cadoo.yaml.example doc
+- [x] 07-01-PLAN.md — Contract/config layer: KindDiagrams const + DiagramsConfig (5 per-type path lists + family gate) + .cadoo.yaml.example doc
 
 **Wave 2** *(blocked on 07-01)*
 - [ ] 07-02-PLAN.md — diagrams generator package: Mermaid keyword sniff + fixed fence wrapper + GenerateMulti (ordered-slice, graceful skip) + golden tests
@@ -189,7 +189,7 @@ Active milestone v1.1 runs first: Phase 7. Deferred milestone v2.0 follows in nu
 | 1. Generators + Publishers + CLI | v1.0 | 7/7 | Complete | 2026-06-05 |
 | 2. Webhook Auto-Trigger + State | v1.0 | 6/6 | Complete | 2026-06-05 |
 | 3. API Docs / OpenAPI | v1.0 | 5/5 | Complete | 2026-06-06 |
-| 7. Release-Docs Engineering Diagrams | v1.1 | 0/3 | Active — planned | - |
+| 7. Release-Docs Engineering Diagrams | v1.1 | 1/3 | In Progress|  |
 | 4. Embedded Local Review + Plugin | v2.0 | 0/TBD | Deferred | - |
 | 5. Live PR/MR Review | v2.0 | 0/TBD | Deferred | - |
 | 6. Connected Mode | v2.0 | 0/TBD | Deferred | - |

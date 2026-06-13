@@ -11,7 +11,7 @@
 
 > Extends the shipped v1.0 `internal/releasedocs` subsystem with a new `diagrams` artifact generator + pages publisher, mirroring the api-docs pattern (Phase 3). Rendering format, derivation strategy, and `.cadoo.yaml` schema are open design questions for `/gsd:discuss-phase 7`.
 
-- [ ] **DIAG-01**: User can enable a `diagrams` release-docs artifact and choose which diagram types are produced (sequence, dependency, state, flowchart, class) via `.cadoo.yaml`.
+- [x] **DIAG-01**: User can enable a `diagrams` release-docs artifact and choose which diagram types are produced (sequence, dependency, state, flowchart, class) via `.cadoo.yaml`.
   - Acceptance: a per-type selection in the `releaseDocs.diagrams` config block; an unselected type is never generated; the artifact respects the existing `enabled:` / `when:` toggles like other release-docs artifacts.
 
 - [ ] **DIAG-02**: For each selected diagram type, Cadoo derives a diagram from the repository at release time.
@@ -30,7 +30,7 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DIAG-01 | Phase 7 | Pending |
+| DIAG-01 | Phase 7 | Complete |
 | DIAG-02 | Phase 7 | Pending |
 | DIAG-03 | Phase 7 | Pending |
 | DIAG-04 | Phase 7 | Pending |
