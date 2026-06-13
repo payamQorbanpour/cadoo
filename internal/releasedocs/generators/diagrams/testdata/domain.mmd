@@ -1,0 +1,10 @@
+classDiagram
+    class User {
+        +string ID
+        +string Email
+        +Login() bool
+    }
+    class Session {
+        +string Token
+    }
+    User --> Session

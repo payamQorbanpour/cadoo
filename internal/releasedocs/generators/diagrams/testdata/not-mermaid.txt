@@ -1,0 +1,2 @@
+This is just some prose describing the system.
+It is not a Mermaid diagram and should be skipped.
