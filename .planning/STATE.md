@@ -2,11 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Release-Docs Engineering Diagrams
-status: ready_to_plan
-last_updated: "2026-06-13"
-last_activity: 2026-06-13
+status: "Ready to discuss → plan (run `/gsd:discuss-phase 7` next)"
+stopped_at: Phase 7 context gathered
+last_updated: "2026-06-13T17:53:09.049Z"
+last_activity: 2026-06-13 — Milestone v1.1 opened; Phase 7 scaffolded into roadmap/requirements; v2.0 (Phases 4-6) deferred, 0 plans started
 progress:
-  total_phases: 1
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -34,6 +35,7 @@ Progress: [░░░░░░░░░░] 0%
 ## Performance Metrics
 
 **Velocity (v1.0 baseline):**
+
 - Total plans completed (v1.0): 18
 - Average duration: ~43 min/plan
 - Total execution time: ~5 hours (wave-based)
@@ -78,6 +80,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-13
-Stopped at: Milestone v1.1 + Phase 7 scaffolded; ready for `/gsd:discuss-phase 7` (then `/gsd:plan-phase 7`). v2.0 deferred at `/gsd:plan-phase 4`.
-Resume file: None
+Last session: 2026-06-13T17:53:09.043Z
+Stopped at: Phase 7 context gathered
+Resume file: .planning/phases/07-engineering-diagrams/07-CONTEXT.md
