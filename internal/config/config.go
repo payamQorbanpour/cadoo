@@ -86,6 +86,11 @@ type ReleaseArtifacts struct {
 	// HTML + Markdown reference). All three outputs are gated together by a
 	// single enabled + when: condition (D-07). Wired in Phase 3 plan 03.
 	APIDocs APIDocsConfig `yaml:"apiDocs"`
+	// Diagrams configures the engineering-diagrams artifact family. The user lists
+	// committed Mermaid source paths per diagram type (sequence, dependency, state,
+	// flowchart, class); all output is gated together by a single enabled + when:
+	// condition (D-07). Wired in Phase 7.
+	Diagrams DiagramsConfig `yaml:"diagrams"`
 }
 
 // ArtifactConfig holds the common per-artifact settings shared by changelog
@@ -129,6 +134,33 @@ type APIDocsConfig struct {
 	// The file is read at rc.ToRef (the release tag), never from the default
 	// branch (consistent with the "config from head" rule).
 	SpecPath string `yaml:"specPath"`
+}
+
+// DiagramsConfig extends ArtifactConfig with diagrams-specific settings. It
+// mirrors the APIDocsConfig inline-embed + extra-fields pattern. The five
+// per-type path lists are fixed (D-04); each holds repository-relative paths to
+// committed Mermaid source files of that diagram type. All resolved diagrams are
+// gated together by the single embedded enabled + when: condition (D-07); the
+// default when: is "always" (D-08). The embedded ArtifactConfig also carries
+// Preset/Template, but the diagrams generator ignores them in v1 (it emits a
+// fixed markdown wrapper around each Mermaid fence).
+type DiagramsConfig struct {
+	ArtifactConfig `yaml:",inline"`
+	// Sequence lists repository-relative paths to committed sequence-diagram
+	// Mermaid sources (sequenceDiagram).
+	Sequence []string `yaml:"sequence"`
+	// Dependency lists repository-relative paths to committed dependency-diagram
+	// Mermaid sources (graph / flowchart / erDiagram).
+	Dependency []string `yaml:"dependency"`
+	// State lists repository-relative paths to committed state-diagram Mermaid
+	// sources (stateDiagram).
+	State []string `yaml:"state"`
+	// Flowchart lists repository-relative paths to committed flowchart Mermaid
+	// sources (flowchart / graph).
+	Flowchart []string `yaml:"flowchart"`
+	// Class lists repository-relative paths to committed class-diagram Mermaid
+	// sources (classDiagram).
+	Class []string `yaml:"class"`
 }
 
 // ReleaseGrouping controls how commits and merged PRs are classified into
