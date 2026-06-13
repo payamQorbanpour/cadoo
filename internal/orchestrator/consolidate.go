@@ -19,12 +19,6 @@ const (
 	prSectionBegin = "<!-- cadoo:pr-body:begin -->"
 	prSectionEnd   = "<!-- cadoo:pr-body:end -->"
 
-	// brandAvatar is the inline avatar markdown rendered next to the
-	// "Cadoo" name in the consolidated comment header. Served from
-	// raw.githubusercontent.com so it loads on any host that renders
-	// markdown (GitHub, GHES, GitLab, self-hosted dashboards).
-	brandAvatar = `<img src="https://raw.githubusercontent.com/payamqorbanpour/cadoo/main/docs/assets/Profile.png" height="28" align="absmiddle" alt="Cadoo">`
-
 	// descriptionAvatar is the icon used on the "Cadoo" header
 	// injected into PR/MR bodies. Differentiating from the brand mark makes
 	// the description block visually distinct from the consolidated review.
@@ -81,7 +75,7 @@ func renderConsolidated(sections []findings.Section) string {
 
 	var b strings.Builder
 	b.WriteString(wrapperBegin)
-	b.WriteString("\n## " + brandAvatar + " Cadoo\n\n")
+	b.WriteString("\n")
 	for _, s := range sections {
 		b.WriteString(renderSection(s))
 		b.WriteString("\n")

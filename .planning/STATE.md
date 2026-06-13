@@ -1,12 +1,12 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: MCP Server + Claude Code Plugin
+milestone: v1.1
+milestone_name: Release-Docs Engineering Diagrams
 status: ready_to_plan
-last_updated: "2026-06-10"
-last_activity: 2026-06-10
+last_updated: "2026-06-13"
+last_activity: 2026-06-13
 progress:
-  total_phases: 3
+  total_phases: 1
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -19,15 +19,15 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-10)
 
-**Core value:** A developer working inside an AI assistant can invoke Cadoo's review tools from the conversation — review a local diff inline, or run a tool against a live PR/MR and post results back idempotently — without leaving the editor.
-**Current focus:** Phase 4 — Embedded Local Review + Plugin
+**Core value:** A maintainer can publish auto-generated software-engineering diagrams (sequence, dependency, state, flowchart, class) as part of release docs, choosing which diagram types to ship per repo.
+**Current focus:** Phase 7 — Release-Docs Engineering Diagrams (milestone v1.1)
 
 ## Current Position
 
-Phase: 4 of 6 (Embedded Local Review + Plugin)
+Phase: 7 (Release-Docs Engineering Diagrams) — milestone v1.1 (single phase)
 Plan: — of — (not yet planned)
-Status: Ready to plan
-Last activity: 2026-06-10 — Milestone v2.0 roadmap created; Phase 4 ready for planning
+Status: Ready to discuss → plan (run `/gsd:discuss-phase 7` next)
+Last activity: 2026-06-13 — Milestone v1.1 opened; Phase 7 scaffolded into roadmap/requirements; v2.0 (Phases 4-6) deferred, 0 plans started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -78,6 +78,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-10
-Stopped at: Roadmap created for v2.0; Phase 4 ready for `/gsd:plan-phase 4`
+Last session: 2026-06-13
+Stopped at: Milestone v1.1 + Phase 7 scaffolded; ready for `/gsd:discuss-phase 7` (then `/gsd:plan-phase 7`). v2.0 deferred at `/gsd:plan-phase 4`.
 Resume file: None

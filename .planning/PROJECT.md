@@ -8,7 +8,23 @@ Cadoo is a multi-tenant AI code reviewer that posts inline review comments, summ
 
 A developer working inside an AI assistant can invoke Cadoo's review tools from the conversation — review a local diff inline, or run a tool against a live PR/MR and post results back to GitHub/GHES/GitLab idempotently — without leaving the editor.
 
-## Current Milestone: v2.0 MCP Server + Claude Code Plugin
+## Current Milestone: v1.1 Release-Docs Engineering Diagrams
+
+**Goal:** Extend the shipped release-docs subsystem (`internal/releasedocs`) so that, at release time, Cadoo generates user-selected software-engineering diagrams (sequence, dependency, state, flowchart, class) from the repository and publishes them as a new `diagrams` artifact — mirroring the api-docs pattern (Phase 3).
+
+**Target features:**
+- New `diagrams` release-docs artifact generator (deterministic-first, LLM nil-tolerant), parallel to changelog/release-notes/blog/api-docs
+- Per-type selection in `.cadoo.yaml` (`releaseDocs.diagrams`) — sequence, dependency, state, flowchart, class — choosable by the user
+- Pages publisher emits diagrams at deterministic paths, idempotent across re-runs
+- Graceful per-type skip (logged reason) when a type can't be derived, without failing the rest of the run
+
+**Open design questions (for `/gsd:discuss-phase 7`):** rendering format (Mermaid / PlantUML / Graphviz-DOT / Structurizr), derivation strategy (static AST analysis vs. existing diagram-source files vs. LLM-from-code), `.cadoo.yaml` schema, publish destinations beyond pages.
+
+**Phase:** Phase 7 (single-phase milestone). Single requirements set: DIAG-01..05 (see REQUIREMENTS.md).
+
+## Deferred Milestone: v2.0 MCP Server + Claude Code Plugin
+
+**Status:** Defined (roadmap + requirements complete), 0 plans started — deferred behind v1.1.
 
 **Goal:** Expose Cadoo's review tools to AI assistants via a new `cadoo-mcp` MCP server binary and a Claude Code plugin.
 
@@ -34,8 +50,12 @@ The existing review pipeline ships separately and is the platform this builds on
 
 ### Active
 
-<!-- Current scope. Building toward these (MCP Server + Claude Code Plugin milestone). REQ-IDs defined in REQUIREMENTS.md. -->
+<!-- Current scope. v1.1 diagrams is active; v2.0 MCP items are deferred. REQ-IDs defined in REQUIREMENTS.md. -->
 
+**v1.1 — Release-Docs Engineering Diagrams (active):**
+- [ ] `diagrams` release-docs artifact generating user-selected engineering diagrams (sequence, dependency, state, flowchart, class) from the repo, published to pages idempotently (DIAG-01..05)
+
+**v2.0 — MCP Server + Claude Code Plugin (deferred):**
 - [ ] MCP server binary (`cadoo-mcp`, stdio transport) advertising Cadoo tools as MCP tools
 - [ ] Local diff review returned inline (working tree / staged / ref range)
 - [ ] Live PR/MR review — dry-run and idempotent post-back (GitHub, GHES, GitLab)
@@ -111,4 +131,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-10 — Milestone v2.0 (MCP Server + Claude Code Plugin) started.*
+*Last updated: 2026-06-13 — Milestone v1.1 (Release-Docs Engineering Diagrams) opened as active; v2.0 (MCP Server + Claude Code Plugin) deferred (0 plans started). Previous update 2026-06-10.*

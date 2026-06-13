@@ -4,7 +4,7 @@
 
 # Cadoo
 
-**AI code review for GitHub, GHES & GitLab — self-host or SaaS.**
+**AI code review**
 
 Cadoo posts inline review comments, generates PR descriptions, suggests improvements, and gates merges via a status check — across GitHub, GitHub Enterprise Server, and GitLab. Self-host on your own cluster or run against the SaaS.
 

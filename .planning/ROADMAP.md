@@ -3,7 +3,8 @@
 ## Milestones
 
 - ✅ **v1.0 Release Docs** - Phases 1-3 (shipped 2026-06-06)
-- 🚧 **v2.0 MCP Server + Claude Code Plugin** - Phases 4-6 (in progress)
+- 🚧 **v1.1 Release-Docs Engineering Diagrams** - Phase 7 (active)
+- ⏸️ **v2.0 MCP Server + Claude Code Plugin** - Phases 4-6 (defined, deferred behind v1.1 — 0 plans started)
 
 ## Phases
 
@@ -152,16 +153,34 @@ Plans:
 **Plans**: TBD
 **UI hint**: no
 
+### Phase 7: Release-Docs Engineering Diagrams
+
+**Milestone**: v1.1 Release-Docs Engineering Diagrams
+**Goal**: At release time, Cadoo generates user-selected software-engineering diagrams (sequence, dependency, state, flowchart, class) from the repository and publishes them as a release-docs artifact to pages — per-type choosable in `.cadoo.yaml`, idempotent across re-runs, deterministic-first, and degrading gracefully when a type can't be derived.
+**Depends on**: Phase 3 (extends the shipped `internal/releasedocs` artifact + pages-publisher pipeline; independent of the v2.0 MCP phases 4–6)
+**Requirements**: DIAG-01, DIAG-02, DIAG-03, DIAG-04, DIAG-05
+**Success Criteria** (what must be TRUE):
+  1. A user can enable a `diagrams` release-docs artifact in `.cadoo.yaml` and choose which diagram types are produced (sequence, dependency, state, flowchart, class); a type not selected is never generated.
+  2. For each selected type, Cadoo produces a diagram derived from the repository at release time and publishes it to pages at deterministic paths; re-running the release overwrites the same paths (idempotent), consistent with the api-docs publisher (Phase 3).
+  3. A diagram type that cannot be derived for the repo is skipped with a logged reason, without failing the changelog/release-notes/blog/api-docs artifacts in the same release-docs run.
+  4. Diagram generation is deterministic-first and reproducible with the LLM disabled (golden-file testable), consistent with the changelog/release-notes generators; any LLM use is nil-tolerant and only refines.
+  5. The flow is dogfooded end-to-end on Cadoo's own repository.
+**Plans**: TBD
+**UI hint**: no
+
+> **Design deferred to `/gsd:discuss-phase 7`:** diagram rendering format (Mermaid / PlantUML / Graphviz-DOT / Structurizr), how diagrams are *derived* from the repo (static AST analysis vs. existing diagram-source files vs. LLM-from-code), `.cadoo.yaml` schema for the `diagrams` artifact + per-type selection, and which publish destinations beyond pages.
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 4 → 5 → 6
+Active milestone v1.1 runs first: Phase 7. Deferred milestone v2.0 follows in numeric order: 4 → 5 → 6.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Generators + Publishers + CLI | v1.0 | 7/7 | Complete | 2026-06-05 |
 | 2. Webhook Auto-Trigger + State | v1.0 | 6/6 | Complete | 2026-06-05 |
 | 3. API Docs / OpenAPI | v1.0 | 5/5 | Complete | 2026-06-06 |
-| 4. Embedded Local Review + Plugin | v2.0 | 0/TBD | Not started | - |
-| 5. Live PR/MR Review | v2.0 | 0/TBD | Not started | - |
-| 6. Connected Mode | v2.0 | 0/TBD | Not started | - |
+| 7. Release-Docs Engineering Diagrams | v1.1 | 0/TBD | Active — discussing | - |
+| 4. Embedded Local Review + Plugin | v2.0 | 0/TBD | Deferred | - |
+| 5. Live PR/MR Review | v2.0 | 0/TBD | Deferred | - |
+| 6. Connected Mode | v2.0 | 0/TBD | Deferred | - |
