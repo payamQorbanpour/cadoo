@@ -28,6 +28,9 @@ vendor/
 *.sqlite
 *.db
 
+# GSD planning runtime state (transient, machine-written)
+/.planning/config.json
+
 # Generated
 internal/db/sqlc_gen/
 
