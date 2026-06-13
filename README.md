@@ -4,7 +4,7 @@
 
 # Cadoo
 
-**AI code reviewer. Multi-VCS, multi-tenant, self-hostable.**
+**AI code review for GitHub, GHES & GitLab — self-host or SaaS.**
 
 Cadoo posts inline review comments, generates PR descriptions, suggests improvements, and gates merges via a status check — across GitHub, GitHub Enterprise Server, and GitLab. Self-host on your own cluster or run against the SaaS.
 
@@ -21,7 +21,7 @@ Cadoo posts inline review comments, generates PR descriptions, suggests improvem
 - **Per-repo config** — `.cadoo.yaml` loaded from the PR head; controls which tools auto-run on which events and paths.
 - **Sandboxed static analysis** — runs 10–15 linters inside isolated containers, results fused into the model's context.
 - **Knowledge base + learnings** — pgvector-backed; `/learn` and `/unlearn` teach Cadoo team-specific rules that persist across reviews.
-- **Release Docs** — generates release notes and changelog documentation from review insights and code changes.
+- **Release Docs** — generates changelog, release notes, blog posts, and an API reference (OpenAPI → offline Redoc HTML + Markdown) on tag/release events, published to the release body, a changelog PR, and a docs branch.
 - **Enterprise-ready** — OIDC + SAML SSO, RBAC, tamper-resistant audit log, Helm chart with PodDisruptionBudget, NetworkPolicy, and ServiceMonitor.
 
 ## Sample output
@@ -159,6 +159,7 @@ internal/mcp             MCP client
 internal/metrics         Prometheus instrumentation
 internal/notifiers       Slack + email
 internal/orchestrator    Tool dispatcher + pipeline
+internal/releasedocs     Release artifacts (changelog, notes, blog, API docs)
 internal/reports         Run reports + dashboard data
 internal/riverq          River-backed Postgres queue (prod)
 internal/settings        Multi-tenant settings + secrets
@@ -235,6 +236,7 @@ Generate release artifacts automatically when you cut a new version. Cadoo can c
 - **Changelog** — structured, grouped section appended to your rolling `CHANGELOG.md` (or create a dedicated changelog PR).
 - **Release notes** — polished narrative for the GitHub/GitLab Release body, highlighting key changes.
 - **Blog post** — long-form announcement for your docs or blog site (optional, trigger on minor/major releases only).
+- **API reference** — fetches a committed OpenAPI/Swagger spec, validates it, and emits the raw spec (`openapi.yaml`), a self-contained offline Redoc HTML reference, and a deterministic Markdown reference. Skips gracefully (no spec, parse/validation error, unsupported version) without failing the rest of the run.
 
 ### Usage
 
@@ -271,6 +273,10 @@ releaseDocs:
     blog:
       enabled: false                  # opt-in
       when: minor-major
+    apiDocs:
+      enabled: false                  # opt-in
+      when: always
+      specPath: ""                    # empty = try openapi.yaml, docs/openapi.yaml, api/openapi.yaml…
 
   grouping:
     source: conventional              # conventional | labels | llm
@@ -279,7 +285,7 @@ releaseDocs:
   publish:
     releaseBody: true                 # update GitHub/GitLab release body
     changelogPR: true                 # open PR with changelog entry
-    pages: { enabled: false }         # publish to docs branch (future)
+    pages: { enabled: false }         # publish artifacts to a docs branch (gh-pages)
 ```
 
 Every artifact is idempotent — re-running with the same tag range edits existing comments and PRs in place instead of creating duplicates.
