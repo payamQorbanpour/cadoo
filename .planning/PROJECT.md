@@ -8,23 +8,16 @@ Cadoo is a multi-tenant AI code reviewer that posts inline review comments, summ
 
 A developer working inside an AI assistant can invoke Cadoo's review tools from the conversation — review a local diff inline, or run a tool against a live PR/MR and post results back to GitHub/GHES/GitLab idempotently — without leaving the editor.
 
-## Current Milestone: v1.1 Release-Docs Engineering Diagrams
+## Shipped Milestones
 
-**Goal:** Extend the shipped release-docs subsystem (`internal/releasedocs`) so that, at release time, Cadoo generates user-selected software-engineering diagrams (sequence, dependency, state, flowchart, class) from the repository and publishes them as a new `diagrams` artifact — mirroring the api-docs pattern (Phase 3).
+- ✅ **v1.0 Release Docs** (Phases 1-3, 2026-06-06) — changelog/release-notes/blog generators, release-body/CHANGELOG-PR/pages publishers, webhook auto-trigger + DB state, API docs/OpenAPI.
+- ✅ **v1.1 Release-Docs Engineering Diagrams** (Phase 7, 2026-06-13) — deterministic, LLM-free `diagrams` generator rendering committed Mermaid sources to pages, idempotent and per-type choosable. DIAG-01..05 shipped; dogfooded on Cadoo's own repo (SC-5).
 
-**Target features:**
-- New `diagrams` release-docs artifact generator (deterministic-first, LLM nil-tolerant), parallel to changelog/release-notes/blog/api-docs
-- Per-type selection in `.cadoo.yaml` (`releaseDocs.diagrams`) — sequence, dependency, state, flowchart, class — choosable by the user
-- Pages publisher emits diagrams at deterministic paths, idempotent across re-runs
-- Graceful per-type skip (logged reason) when a type can't be derived, without failing the rest of the run
+Full details: `.planning/MILESTONES.md`. Archived roadmaps/requirements: `.planning/milestones/`.
 
-**Open design questions (for `/gsd:discuss-phase 7`):** rendering format (Mermaid / PlantUML / Graphviz-DOT / Structurizr), derivation strategy (static AST analysis vs. existing diagram-source files vs. LLM-from-code), `.cadoo.yaml` schema, publish destinations beyond pages.
+## Current Milestone: v2.0 MCP Server + Claude Code Plugin
 
-**Phase:** Phase 7 (single-phase milestone). Single requirements set: DIAG-01..05 (see REQUIREMENTS.md).
-
-## Deferred Milestone: v2.0 MCP Server + Claude Code Plugin
-
-**Status:** Defined (roadmap + requirements complete), 0 plans started — deferred behind v1.1.
+**Status:** Active (defined 2026-06-10 — roadmap + requirements complete, research HIGH confidence; promoted to active when v1.1 shipped). 0 plans started.
 
 **Goal:** Expose Cadoo's review tools to AI assistants via a new `cadoo-mcp` MCP server binary and a Claude Code plugin.
 
@@ -129,4 +122,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-13 — Milestone v1.1 (Release-Docs Engineering Diagrams) SHIPPED: Phase 7 complete (3/3 plans, verification passed 9/9). v2.0 (MCP Server + Claude Code Plugin) remains deferred (0 plans started). Previous update 2026-06-13.*
+*Last updated: 2026-06-13 after v1.1 milestone — v1.1 (Release-Docs Engineering Diagrams) SHIPPED & ARCHIVED (Phase 7, 3/3 plans, verification 9/9). v2.0 (MCP Server + Claude Code Plugin) promoted to active milestone (0 plans started). Previous update 2026-06-13.*

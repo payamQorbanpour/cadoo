@@ -1,46 +1,10 @@
 # Requirements: Cadoo
 
-> This file hosts the **active milestone's** requirements (v1.1, below), followed by the **deferred** v2.0 milestone (defined, not started). v1.0 release-docs requirements shipped 2026-06-06 and are recorded in PROJECT.md → Validated.
+> This file hosts the **active milestone's** requirements: **v2.0 MCP Server + Claude Code Plugin** (defined 2026-06-10, promoted to active when v1.1 shipped on 2026-06-13). Shipped milestones are archived under `.planning/milestones/` and recorded in PROJECT.md → Validated: v1.0 Release Docs (2026-06-06) and v1.1 Release-Docs Engineering Diagrams (2026-06-13).
 
 ---
 
-## Milestone v1.1 — Release-Docs Engineering Diagrams (ACTIVE)
-
-**Defined:** 2026-06-13
-**Core Value:** A maintainer can publish auto-generated software-engineering diagrams (sequence, dependency, state, flowchart, class) as part of release docs, choosing which diagram types to ship per repo.
-
-> Extends the shipped v1.0 `internal/releasedocs` subsystem with a new `diagrams` artifact generator + pages publisher, mirroring the api-docs pattern (Phase 3). Rendering format, derivation strategy, and `.cadoo.yaml` schema are open design questions for `/gsd:discuss-phase 7`.
-
-- [x] **DIAG-01**: User can enable a `diagrams` release-docs artifact and choose which diagram types are produced (sequence, dependency, state, flowchart, class) via `.cadoo.yaml`.
-  - Acceptance: a per-type selection in the `releaseDocs.diagrams` config block; an unselected type is never generated; the artifact respects the existing `enabled:` / `when:` toggles like other release-docs artifacts.
-
-- [x] **DIAG-02**: For each selected diagram type, Cadoo derives a diagram from the repository at release time.
-  - Acceptance: each selected type yields a rendered diagram artifact generated from the repo's code/structure (derivation strategy decided at phase planning); a type with no derivable content is handled per DIAG-04.
-
-- [x] **DIAG-03**: Generated diagrams are published to pages at deterministic paths, idempotent across re-runs.
-  - Acceptance: diagrams land at deterministic paths (e.g. `docs/releases/vX.Y.Z/diagrams/<type>.*`); re-running the release overwrites the same paths with no duplicates, consistent with the api-docs / pages publisher.
-
-- [x] **DIAG-04**: Per-type graceful degradation — an underivable type is skipped with a logged reason, never failing the rest of the run.
-  - Acceptance: a diagram type that cannot be produced is skipped with a logged reason; changelog/release-notes/blog/api-docs artifacts in the same run still complete.
-
-- [x] **DIAG-05**: Diagram generation is deterministic-first and reproducible with the LLM disabled.
-  - Acceptance: with LLM off, output is reproducible (golden-file testable), consistent with the changelog/release-notes generators; any LLM use is nil-tolerant and only refines wording/layout.
-
-### Traceability (v1.1)
-
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| DIAG-01 | Phase 7 | Complete |
-| DIAG-02 | Phase 7 | Complete |
-| DIAG-03 | Phase 7 | Complete |
-| DIAG-04 | Phase 7 | Complete |
-| DIAG-05 | Phase 7 | Complete |
-
-**Coverage (v1.1):** 5 requirements, all mapped to Phase 7, all Complete, 0 unmapped. Phase 7 success criterion SC-5 (dogfood on Cadoo's own repo) verified via the human-verify checkpoint in 07-03 (both diagram pages render on github.com; re-run idempotent).
-
----
-
-## Milestone v2.0 — MCP Server + Claude Code Plugin (DEFERRED behind v1.1)
+## Milestone v2.0 — MCP Server + Claude Code Plugin (ACTIVE)
 
 **Defined:** 2026-06-10
 **Core Value:** A developer working inside an AI assistant can invoke Cadoo's review tools from the conversation — review a local diff inline, or run a tool against a live PR/MR and post results back to GitHub/GHES/GitLab idempotently — without leaving the editor.
@@ -169,4 +133,4 @@ Explicitly excluded. Documented to prevent scope creep.
 - Unmapped: 0
 
 ---
-*Requirements defined: 2026-06-10*
+*Requirements defined: 2026-06-10. Promoted to active milestone: 2026-06-13 (after v1.1 shipped).*

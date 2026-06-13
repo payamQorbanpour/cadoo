@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Release-Docs Engineering Diagrams
-status: milestone_complete
-stopped_at: Milestone complete (Phase 07 was final phase)
-last_updated: 2026-06-13T18:57:38.384Z
-last_activity: 2026-06-13
+status: Awaiting next milestone
+stopped_at: Completed 07-03-PLAN.md (Phase 7 complete)
+last_updated: "2026-06-13T19:35:54.563Z"
+last_activity: 2026-06-13 — Milestone v1.1 completed and archived
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 3
-  completed_plans: 21
+  completed_plans: 3
   percent: 25
 ---
 
@@ -25,12 +25,10 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 
 ## Current Position
 
-Phase: 07
-Plan: Not started
-Status: Milestone complete
-Last activity: 2026-06-13
-
-Progress: [██████████] 100%
+Phase: Milestone v1.1 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-06-13 — Milestone v1.1 completed and archived
 
 ## Performance Metrics
 
@@ -86,9 +84,18 @@ None yet.
 |----------|------|--------|-------------|
 | v2 req | HTTP/SSE transport for `cadoo-mcp` | Deferred to post-v2.0 | Requirements |
 | v2 req | OAuth flows for VCS auth | Deferred to post-v2.0 | Requirements |
+| seed | SEED-001: GitHub Pages on every document publishing | dormant | v1.1 close (2026-06-13) |
+| uat_gap | 01-HUMAN-UAT (v1.0 Phase 01) | approved, 0 open scenarios | v1.1 close (2026-06-13) |
+| uat_gap | 02-HUMAN-UAT (v1.0 Phase 02) | partial, 0 open scenarios | v1.1 close (2026-06-13) |
+| verification_gap | 01-VERIFICATION (v1.0 Phase 01) | human_needed (no open scenarios) | v1.1 close (2026-06-13) |
+| verification_gap | 02-VERIFICATION (v1.0 Phase 02) | human_needed (no open scenarios) | v1.1 close (2026-06-13) |
 
 ## Session Continuity
 
 Last session: 2026-06-13T18:29:40.758Z
 Stopped at: Completed 07-03-PLAN.md (Phase 7 complete)
 Resume file: None
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
