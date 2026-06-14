@@ -1,0 +1,25 @@
+{
+  "source_path": "/Users/payam/projects/github.com/payamqorbanpour/cadoo/docs/superpowers/specs/2026-06-14-cadoo-ci-dedup-convergence-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Convergent CI-mode review (dedup that reaches a fixed point)",
+  "summary": "Technical design for making cadoo-cli CI-mode stateless dedup converge to a fixed point via key-carry, durable thread-state suppression, and incremental review.",
+  "scope": [
+    "cadoo-cli CI-mode",
+    "stateless dedup path",
+    "findings.Store / memoryStore",
+    "findings.PostedFinding / findingRec / StructuralKey",
+    "vcs.PriorReviewReader",
+    "vcs.PriorInline / vcs.PriorReview",
+    "vcs.Provider DiffBetween capability",
+    "orchestrator resolveStalePriors",
+    "GitLab ListCadooArtifacts read-back",
+    "incremental review change set",
+    "summary wrapper reviewed-sha marker"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

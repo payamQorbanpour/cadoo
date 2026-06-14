@@ -5,6 +5,7 @@
 - ✅ **v1.0 Release Docs** — Phases 1-3 (shipped 2026-06-06)
 - ✅ **v1.1 Release-Docs Engineering Diagrams** — Phase 7 (shipped 2026-06-13)
 - 🚧 **v2.0 MCP Server + Claude Code Plugin** — Phases 4-6 (active)
+- 📋 **v2.1 CI-Mode Dedup Convergence** — Phase 8 (queued)
 
 ## Phases
 
@@ -106,10 +107,27 @@ Plans:
 **Plans**: TBD
 **UI hint**: no
 
+### 📋 v2.1 CI-Mode Dedup Convergence (Queued)
+
+**Milestone Goal:** Make `cadoo ci` review converge on re-reviewed PRs/MRs instead of accumulating duplicate threads unboundedly. Disjoint from v2.0 (touches `internal/orchestrator`, `internal/findings`, `internal/vcs`; no MCP scope). Source SPEC: `docs/superpowers/specs/2026-06-14-cadoo-ci-dedup-convergence-design.md`.
+
+### Phase 8: CI-Mode Dedup Convergence
+
+**Goal**: On a re-reviewed PR/MR, `cadoo ci` reaches a fixed point — resolving threads and pushing converges instead of accumulating duplicate threads — via end-to-end `StructuralKey` (no self-resolution), resolved-thread sticky suppression, and incremental review bounded by a persisted last-reviewed SHA.
+**Depends on**: Nothing (modifies existing CI-mode dedup in `internal/orchestrator`/`internal/findings`/`internal/vcs`; independent of v2.0 MCP phases 4–6)
+**Requirements**: REQ-cidedup-convergent-review, REQ-cidedup-no-self-resolution (Part A), REQ-cidedup-honor-resolves (Part B), REQ-cidedup-incremental-review (Part C)
+**Success Criteria** (what must be TRUE):
+  1. A `cadoo ci` re-run against an unchanged head posts zero new threads and resolves zero existing ones (fixed-point); once code stops changing, total thread count is monotonic non-increasing across resyncs.
+  2. `resolveStalePriors` no longer resolves still-valid multi-line threads — the carried `StructuralKey` is compared directly (no first-line recompute), and the fix applies to both the CI memory-store and DB-backed worker paths.
+  3. A thread resolved by the user (or by Cadoo) stays gone: a reworded duplicate in the same `(tool, file)` with line-overlap or Jaccard ≥ `ResolvedSuppressThreshold` is suppressed, while an unrelated new finding elsewhere in the file is still posted.
+  4. Inline-emitting tools review only the `lastReviewedSHA..head` change set (persisted via `<!-- cadoo:reviewed-sha:<sha> -->`); first-run / non-ancestor SHA falls back to full review; `resolveStalePriors` only resolves priors whose anchor line is inside the incremental change set.
+**Plans**: TBD
+**UI hint**: no
+
 ## Progress
 
 **Execution Order:**
-Shipped: v1.0 (Phases 1-3), v1.1 (Phase 7). Active milestone v2.0 runs in numeric order: 4 → 5 → 6.
+Shipped: v1.0 (Phases 1-3), v1.1 (Phase 7). Active milestone v2.0 runs in numeric order: 4 → 5 → 6. Queued: v2.1 (Phase 8) — independent of v2.0; promote when ready.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -120,3 +138,4 @@ Shipped: v1.0 (Phases 1-3), v1.1 (Phase 7). Active milestone v2.0 runs in numeri
 | 4. Embedded Local Review + Plugin | v2.0 | 0/TBD | Not started | - |
 | 5. Live PR/MR Review | v2.0 | 0/TBD | Not started | - |
 | 6. Connected Mode | v2.0 | 0/TBD | Not started | - |
+| 8. CI-Mode Dedup Convergence | v2.1 | 0/TBD | Queued | - |

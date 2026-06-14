@@ -2,11 +2,11 @@
 
 Extracted requirements with derived IDs and acceptance criteria. Each carries a `source:`.
 
-> No PRD documents were present in this ingest set. The requirements below are derived from the single
-> SPEC document (release-docs design) for downstream planning convenience. They are SPEC-origin
-> requirements, not PRD-origin — the roadmapper should treat the SPEC (`constraints.md`) as the
-> authoritative contract and these as a planning-friendly restatement of its explicit user requirements
-> and goals. No competing acceptance variants exist (single source).
+> No PRD documents were present in this ingest set. The requirements below are derived from the SPEC
+> documents for downstream planning convenience. They are SPEC-origin requirements, not PRD-origin — the
+> roadmapper should treat the SPECs (`constraints.md`) as the authoritative contract and these as a
+> planning-friendly restatement of explicit user requirements and goals. No competing acceptance variants
+> exist (each requirement derives from a single source).
 
 ---
 
@@ -105,3 +105,83 @@ Acceptance criteria:
 - releasebody: upserts/updates the Release body inside Cadoo markers, preserving user content.
 - changelogpr: opens/updates a single PR prepending the new `CHANGELOG.md` section.
 - pages: commits rendered artifacts to a configured branch/dir with deterministic paths.
+
+---
+---
+
+# CI-mode dedup convergence (ingest 2026-06-14)
+
+> Derived from `docs/superpowers/specs/2026-06-14-cadoo-ci-dedup-convergence-design.md` (SPEC, high
+> confidence, not locked). Distinct subsystem from release-docs above — `cadoo-cli` CI-mode dedup, not
+> `internal/releasedocs`. Single source; no competing acceptance variants.
+
+---
+
+## REQ-cidedup-convergent-review
+
+- source: /Users/payam/projects/github.com/payamqorbanpour/cadoo/docs/superpowers/specs/2026-06-14-cadoo-ci-dedup-convergence-design.md
+- origin: SPEC (Problem / convergence goal)
+- scope: cadoo-cli CI-mode stateless dedup path
+
+Description: On a re-reviewed PR/MR, CI-mode review must reach a fixed point instead of ratcheting thread
+count upward (observed 39 → 45 → …). Resolving open threads and pushing must converge — no fresh batch of
+near-duplicate threads reappearing.
+
+Acceptance criteria:
+- Once code stops changing, total thread count is **monotonic non-increasing** across resync runs.
+- A re-run against an **unchanged head** posts **zero** new threads and resolves **zero** existing ones
+  (fixed-point test).
+- A push touching N lines posts at most findings scoped to that change; pre-existing threads on untouched
+  code persist (coverage from earlier full runs is not lost).
+
+---
+
+## REQ-cidedup-no-self-resolution
+
+- source: /Users/payam/projects/github.com/payamqorbanpour/cadoo/docs/superpowers/specs/2026-06-14-cadoo-ci-dedup-convergence-design.md
+- origin: SPEC (Part A)
+- scope: orchestrator.resolveStalePriors / findings.PostedFinding.StructuralKey
+
+Description: Cadoo must stop resolving its own still-valid multi-line threads. The real `StructuralKey` is
+threaded end-to-end instead of being lossily reconstructed from the comment's first line.
+
+Acceptance criteria:
+- `resolveStalePriors` compares the carried `StructuralKey` against current keys (no first-line recompute).
+- Regression test: a multi-line `improve`-style body whose finding is still present is **not** resolved.
+- Fix applies to both the CI memory-store path and the DB-backed worker path.
+
+---
+
+## REQ-cidedup-honor-resolves
+
+- source: /Users/payam/projects/github.com/payamqorbanpour/cadoo/docs/superpowers/specs/2026-06-14-cadoo-ci-dedup-convergence-design.md
+- origin: SPEC (Part B)
+- scope: memoryStore.has / vcs.PriorInline / findings.findingRec
+
+Description: A resolved thread (by user or by Cadoo) must carry durable suppression weight so a reworded
+version of the same finding does not return.
+
+Acceptance criteria:
+- Resolved prior + reworded new finding in the same `(tool, file)` with line-overlap or Jaccard ≥
+  `ResolvedSuppressThreshold` (≈0.3) → **suppressed**.
+- Resolved prior + unrelated new finding elsewhere in the same file → **NOT suppressed** (guardrail holds).
+- Anchor line is captured from `n.Position.NewLine` and the resolved flag is carried into the seeded store record.
+
+---
+
+## REQ-cidedup-incremental-review
+
+- source: /Users/payam/projects/github.com/payamqorbanpour/cadoo/docs/superpowers/specs/2026-06-14-cadoo-ci-dedup-convergence-design.md
+- origin: SPEC (Part C)
+- scope: summary wrapper reviewed-sha / vcs.Provider DiffBetween / tools.Input
+
+Description: Only re-review code changed since Cadoo last reviewed — a structural ceiling on thread growth.
+The last-reviewed SHA is persisted in the summary wrapper; inline tools see only the incremental change set.
+
+Acceptance criteria:
+- Summary wrapper embeds `<!-- cadoo:reviewed-sha:<sha> -->`; `LastReviewedSHA` is parsed back on read.
+- When `LastReviewedSHA` is an ancestor of head, inline-emitting tools receive only the `lastReviewedSHA..head`
+  change set; summary tools keep the full PR view.
+- Fallbacks honored: first run / non-ancestor SHA (force-push, rebase) → full review; empty incremental
+  diff → no inline tools run, summary refreshed only.
+- `resolveStalePriors` only resolves priors whose anchor line falls inside the incremental change set.

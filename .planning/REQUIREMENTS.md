@@ -133,4 +133,24 @@ Explicitly excluded. Documented to prevent scope creep.
 - Unmapped: 0
 
 ---
-*Requirements defined: 2026-06-10. Promoted to active milestone: 2026-06-13 (after v1.1 shipped).*
+
+## Queued Milestone v2.1 — CI-Mode Dedup Convergence (QUEUED)
+
+> Queued behind the active v2.0 milestone. Source: `docs/superpowers/specs/2026-06-14-cadoo-ci-dedup-convergence-design.md` (approved SPEC, ingested 2026-06-14). Scope is disjoint from v2.0 (CI-mode dedup in `internal/orchestrator`/`internal/findings`/`internal/vcs`, not the MCP server). Promote to active via `/gsd:new-milestone` when v2.0 work allows; these requirements move into the active block on promotion.
+
+- [ ] **REQ-cidedup-convergent-review**: On a re-reviewed PR/MR, CI-mode review reaches a fixed point instead of ratcheting thread count upward.
+  - Acceptance: once code stops changing, total thread count is monotonic non-increasing across resyncs; a re-run against an unchanged head posts 0 new threads and resolves 0 existing ones; a push touching N lines posts at most findings scoped to that change while pre-existing threads on untouched code persist.
+
+- [ ] **REQ-cidedup-no-self-resolution** (Part A): Cadoo stops resolving its own still-valid multi-line threads; the real `StructuralKey` is threaded end-to-end instead of recomputed from the comment's first line.
+  - Acceptance: `resolveStalePriors` compares the carried `StructuralKey` against current keys (no first-line recompute); regression test shows a still-present multi-line `improve`-style finding is not resolved; fix applies to both the CI memory-store and DB-backed worker paths.
+
+- [ ] **REQ-cidedup-honor-resolves** (Part B): A resolved thread (by user or Cadoo) carries durable suppression so a reworded version of the same finding does not return.
+  - Acceptance: resolved prior + reworded new finding in the same `(tool, file)` with line-overlap or Jaccard ≥ `ResolvedSuppressThreshold` (≈0.3) → suppressed; resolved prior + unrelated new finding elsewhere in the file → NOT suppressed; anchor line captured from `n.Position.NewLine` and the resolved flag carried into the seeded store record.
+
+- [ ] **REQ-cidedup-incremental-review** (Part C): Only re-review code changed since Cadoo last reviewed — a structural ceiling on thread growth.
+  - Acceptance: summary wrapper embeds `<!-- cadoo:reviewed-sha:<sha> -->` and `LastReviewedSHA` is parsed back; when it is an ancestor of head, inline-emitting tools receive only the `lastReviewedSHA..head` change set while summary tools keep the full PR view; fallbacks honored (first run / non-ancestor SHA → full review; empty incremental diff → summary refresh only); `resolveStalePriors` only resolves priors whose anchor line is inside the incremental change set.
+
+**v2.1 Coverage:** 4 requirements, all mapped to Phase 8.
+
+---
+*Requirements defined: 2026-06-10. Promoted to active milestone: 2026-06-13 (after v1.1 shipped). v2.1 requirements ingested 2026-06-14 (queued).*

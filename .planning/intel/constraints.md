@@ -234,3 +234,147 @@ event kind, no-op early.
 
 Non-goals: extending `tools.*`; arbitrary-language API docs (phase 3, narrow framework set first);
 blog publish destinations beyond pages (e.g. dev.to) out of scope.
+
+---
+---
+
+# CI-mode dedup convergence (ingest 2026-06-14)
+
+> Source SPEC: `docs/superpowers/specs/2026-06-14-cadoo-ci-dedup-convergence-design.md`
+> (type: SPEC, confidence: high, locked: false, precedence: default). Distinct subsystem from
+> release-docs above — this targets `cadoo-cli` CI-mode dedup in `internal/orchestrator` /
+> `internal/findings` / `internal/vcs`. No scope overlap with `internal/releasedocs`.
+
+---
+
+## CONS-cidedup-self-resolution-fix — Carry StructuralKey end-to-end (Part A)
+
+- source: /Users/payam/projects/github.com/payamqorbanpour/cadoo/docs/superpowers/specs/2026-06-14-cadoo-ci-dedup-convergence-design.md
+- type: api-contract
+- scope: findings.PostedFinding / findings.ListPostedFindings / findings.NewFromPrior / orchestrator.resolveStalePriors
+
+Root cause: `resolveStalePriors` (`reviewer.go:491`) rebuilds each prior finding's `StructuralKey` from
+`p.Title` (only the first line of the body, `findings.go:184`), while the current run's keys come from the
+full body (`reviewer.go:481`). For any multi-line comment `normalizeTitle(firstLine) != normalizeTitle(fullBody)`,
+so a still-valid finding looks stale and Cadoo resolves its own thread every run.
+
+Fix (normative):
+- Add `StructuralKey string` to `findings.PostedFinding`.
+- Extend `ListPostedFindings` to select the existing `structural_key` DB column (CI read-back already has it
+  in `pi.StructuralKey` from the `sk=` marker).
+- `findings.NewFromPrior` populates `PostedFinding.StructuralKey` from `pi.StructuralKey`.
+- In `resolveStalePriors`, compare `p.StructuralKey` directly against `currentKeys` — do NOT recompute from
+  `p.Title`.
+
+Applies to **both** backends: the DB-backed worker path benefits from Part A as well (the
+`resolveStalePriors` fix and `StructuralKey` on `PostedFinding`).
+
+---
+
+## CONS-cidedup-thread-state-suppression — Thread state as durable memory (Part B)
+
+- source: /Users/payam/projects/github.com/payamqorbanpour/cadoo/docs/superpowers/specs/2026-06-14-cadoo-ci-dedup-convergence-design.md
+- type: protocol
+- scope: vcs.PriorInline / gitlab.ListCadooArtifacts / findings.NewFromPrior / findings.findingRec / memoryStore.has
+
+Make resolution and location first-class dedup inputs so a resolved thread carries suppression weight.
+
+- **Capture anchor line:** add `Line int` (and optionally `EndLine int`) to `vcs.PriorInline`; populate from
+  `n.Position.NewLine` in `ListCadooArtifacts`. Plumb through `NewFromPrior` into the seeded `findingRec`
+  (add a `Line` field).
+- **Capture resolved flag in the store:** `NewFromPrior` reads `pi.Resolved` (already on `PriorInline`) into
+  the seeded record. (Currently `gitlab.go:263` records `Resolved` but `prior.go:34-53` drops it.)
+- **Sticky suppression for resolved findings:** extend `memoryStore.has` so a new comment is suppressed when,
+  for the same `(tool, file)`:
+  - it matches an *open* prior by the existing rule (exact `StructuralKey` OR Jaccard >= `SimilarTitleThreshold`), **or**
+  - it matches a *resolved* prior by a widened rule: line-range overlap with the resolved thread's anchor,
+    **or** Jaccard >= a lower `ResolvedSuppressThreshold` (e.g. 0.3).
+
+**Guardrail (normative):** widened suppression is scoped to `(tool, file)` and (for the line rule) to
+overlapping lines, so it cannot hide a genuinely new, different finding elsewhere in the same file.
+
+---
+
+## CONS-cidedup-incremental-review — Incremental review change set (Part C)
+
+- source: /Users/payam/projects/github.com/payamqorbanpour/cadoo/docs/superpowers/specs/2026-06-14-cadoo-ci-dedup-convergence-design.md
+- type: protocol
+- scope: summary wrapper / vcs.PriorReview / vcs.Provider DiffBetween / tools.Input context selection
+
+Only re-review code changed since Cadoo last reviewed — a structural ceiling on thread growth.
+
+- **Persist last-reviewed SHA:** embed `<!-- cadoo:reviewed-sha:<head-sha> -->` in the summary wrapper
+  comment. Add `LastReviewedSHA string` to `vcs.PriorReview`; parse it in `ListCadooArtifacts` from the
+  summary note; write it into the summary body when posting/editing the overview.
+- **Compute incremental change set:** when `LastReviewedSHA` is present AND an ancestor of current head,
+  fetch the `lastReviewedSHA..head` diff via a new provider capability `DiffBetween(ctx, pr, oldSHA, newSHA)`
+  (GitLab compare API, GitHub compare API). Result = files + hunks/lines touched since last review.
+- **Feed inline tools the incremental view:** inline-emitting tools (`review`, `improve`, security, …)
+  receive a `tools.Input` filtered to the incremental change set. Summary tools (`describe`, `changelog`)
+  keep the **full** PR view. Preferred mechanism: carry **both** a full and an incremental context on
+  `tools.Input` and let each tool select (avoids a brittle registry-wide inline/summary classification).
+- **Fallbacks (normative):** first run (no prior SHA) → full review. `LastReviewedSHA` not reachable from
+  head (force-push / rebase) → full review. Empty incremental diff → no inline tools run, summary refreshed only.
+
+---
+
+## CONS-cidedup-resolvestale-incremental-rule — resolveStalePriors under incremental review
+
+- source: /Users/payam/projects/github.com/payamqorbanpour/cadoo/docs/superpowers/specs/2026-06-14-cadoo-ci-dedup-convergence-design.md
+- type: protocol
+- scope: orchestrator.resolveStalePriors × incremental change set
+
+Critical interaction: under incremental review, findings on unchanged code are intentionally not
+regenerated this run, so naive `resolveStalePriors` would see them missing from `currentKeys` and resolve
+them all — re-introducing churn.
+
+**Rule (normative):** `resolveStalePriors` may only consider a prior "resolvable" when its anchor line falls
+**inside the incremental change set** for this run. Threads anchored to untouched code are neither re-posted
+nor resolved — they simply persist. (Requires Part B's captured anchor line.) On a full run (no prior SHA /
+force-push fallback) the change set is the entire diff, so behavior matches today's full-review semantics.
+
+---
+
+## CONS-cidedup-data-marker-changes — Data / marker changes (summary)
+
+- source: /Users/payam/projects/github.com/payamqorbanpour/cadoo/docs/superpowers/specs/2026-06-14-cadoo-ci-dedup-convergence-design.md
+- type: api-contract
+- scope: vcs.PriorInline / vcs.PriorReview / findings.PostedFinding / findings.findingRec / summary wrapper / vcs.Provider
+
+| Artifact | Change |
+|---|---|
+| `vcs.PriorInline` | add `Line int` (and `EndLine int`), populated from `n.Position` |
+| `vcs.PriorReview` | add `LastReviewedSHA string` |
+| `findings.PostedFinding` | add `StructuralKey string` |
+| `findings.findingRec` | add `Line int`, `Resolved bool` |
+| Summary wrapper body | embed `<!-- cadoo:reviewed-sha:<sha> -->` |
+| Inline marker | **unchanged** — `sk=` / `nt=` already sufficient |
+| `vcs.Provider` | add `DiffBetween(ctx, pr, oldSHA, newSHA)` capability (GitLab + GitHub) |
+
+**No new DB migration:** this is the CI-mode (memory store) path. The DB-backed worker path is unaffected by
+Parts B/C but benefits from Part A.
+
+---
+
+## CONS-cidedup-nonfunctional — Non-functional constraints & out-of-scope (YAGNI)
+
+- source: /Users/payam/projects/github.com/payamqorbanpour/cadoo/docs/superpowers/specs/2026-06-14-cadoo-ci-dedup-convergence-design.md
+- type: nfr
+- scope: cross-cutting
+
+- **Convergence invariant (testable):** once code stops changing, thread count must be **monotonic
+  non-increasing**; a re-run against an unchanged head posts **zero** new threads and resolves **zero**
+  existing ones (fixed-point test).
+- **Shippable independently:** Parts A, B, C are built in order; each is independently shippable and verifiable.
+  A and B stop the runaway loop; C is the structural ceiling.
+- **Tunable constants:** `ResolvedSuppressThreshold` (start 0.3) and line-overlap tolerance (start
+  exact-line-range overlap) must be constants for tuning.
+- **GitLab CI-mode is the reported bug; GitHub inherits Parts A/C generically** — no GitHub/GHES behavioral
+  parity testing beyond the shared `DiffBetween` capability.
+
+Out of scope (YAGNI):
+- DB schema changes / new migrations (CI-mode is memory-backed).
+- Lowering LLM temperature / model-determinism tuning (addressed structurally by Part C).
+- Code-content-hash finding identity (hashing the flagged source span instead of prose) — stronger but
+  larger; revisit only if leakage persists after Part C.
+- GitHub/GHES behavioral parity testing beyond the shared `DiffBetween` capability.

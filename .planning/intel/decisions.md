@@ -3,7 +3,7 @@
 One entry per architectural decision: title, source, status (locked/proposed), decision statement, scope.
 
 > No ADR documents were present in this ingest set, so there are **no LOCKED decisions**. The entries
-> below are design decisions stated by the single SPEC document. They are recorded as **proposed**
+> below are design decisions stated by the ingested SPEC documents. They are recorded as **proposed**
 > (SPEC-origin, not ADR-origin) — downstream consumers must NOT treat them as immutable locked decisions.
 > They are surfaced here so the roadmapper can see the key architectural choices in one place; the
 > authoritative form lives in `constraints.md`.
@@ -80,3 +80,75 @@ Decision:
 - Phase 2: release/tag webhook ingestion + ReleaseJob enqueue (River + memory) + worker consumer + DB
   state table/migration + pages publisher + blog generator.
 - Phase 3: API docs / OpenAPI (narrow framework set first).
+
+---
+---
+
+## CI-mode dedup convergence (ingest 2026-06-14)
+
+> Source SPEC: `docs/superpowers/specs/2026-06-14-cadoo-ci-dedup-convergence-design.md`. Distinct
+> subsystem from release-docs (CI-mode dedup, not `internal/releasedocs`). All proposed, none locked.
+
+---
+
+## DEC-cidedup-carry-structural-key — Carry StructuralKey end-to-end, never recompute from first line
+
+- source: /Users/payam/projects/github.com/payamqorbanpour/cadoo/docs/superpowers/specs/2026-06-14-cadoo-ci-dedup-convergence-design.md
+- status: proposed (SPEC-origin, not locked)
+- scope: findings.PostedFinding / orchestrator.resolveStalePriors
+
+Decision: Thread the real `StructuralKey` from the marker / DB column through `PostedFinding` and compare it
+directly in `resolveStalePriors`. Stop reconstructing the key from the lossy first line of the comment body.
+Applies to both the CI memory-store and DB-backed worker paths. (Part A.)
+
+---
+
+## DEC-cidedup-resolved-as-durable-memory — Treat resolved threads + anchor line as first-class suppression
+
+- source: /Users/payam/projects/github.com/payamqorbanpour/cadoo/docs/superpowers/specs/2026-06-14-cadoo-ci-dedup-convergence-design.md
+- status: proposed (SPEC-origin, not locked)
+- scope: vcs.PriorInline / findings.findingRec / memoryStore.has
+
+Decision: Capture each prior thread's anchor line and resolved flag into the seeded store, and widen
+`memoryStore.has` so a resolved prior suppresses a reworded new finding (line-overlap OR a lower
+`ResolvedSuppressThreshold` ≈ 0.3), scoped to `(tool, file)` so genuinely new findings elsewhere are not
+hidden. (Part B.)
+
+---
+
+## DEC-cidedup-incremental-dual-context — Incremental review via reviewed-sha marker + dual context on tools.Input
+
+- source: /Users/payam/projects/github.com/payamqorbanpour/cadoo/docs/superpowers/specs/2026-06-14-cadoo-ci-dedup-convergence-design.md
+- status: proposed (SPEC-origin, not locked)
+- scope: summary wrapper / vcs.Provider DiffBetween / tools.Input
+
+Decision: Persist the last-reviewed SHA in the summary wrapper (`<!-- cadoo:reviewed-sha:<sha> -->`), add a
+`DiffBetween` provider capability, and carry **both** full and incremental context on `tools.Input` so each
+tool selects (preferred over a registry-wide inline/summary classification). Inline tools use the incremental
+view; summary tools use the full view; fallbacks to full review on first run / non-ancestor SHA / force-push.
+(Part C. Recommended over tool classification per the SPEC's open question 1.)
+
+---
+
+## DEC-cidedup-resolvestale-scoped-to-changeset — resolveStalePriors only resolves priors inside the change set
+
+- source: /Users/payam/projects/github.com/payamqorbanpour/cadoo/docs/superpowers/specs/2026-06-14-cadoo-ci-dedup-convergence-design.md
+- status: proposed (SPEC-origin, not locked)
+- scope: orchestrator.resolveStalePriors × incremental change set
+
+Decision: Under incremental review, `resolveStalePriors` may only resolve a prior whose anchor line falls
+inside the current run's incremental change set; threads on untouched code persist (neither re-posted nor
+resolved). On a full run the change set is the entire diff, preserving today's semantics. (Required to keep
+Part C from re-introducing churn.)
+
+---
+
+## DEC-cidedup-no-db-migration — CI-mode fix is memory-store only; no new migration
+
+- source: /Users/payam/projects/github.com/payamqorbanpour/cadoo/docs/superpowers/specs/2026-06-14-cadoo-ci-dedup-convergence-design.md
+- status: proposed (SPEC-origin, not locked)
+- scope: persistence / scope boundary
+
+Decision: This is the CI-mode (memory store) path — no DB schema changes or migrations. The DB-backed worker
+path is unaffected by Parts B/C but inherits Part A. Code-content-hash finding identity and LLM-temperature
+tuning are explicitly out of scope (YAGNI) unless leakage persists after Part C.
