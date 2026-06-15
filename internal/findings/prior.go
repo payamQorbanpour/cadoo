@@ -59,5 +59,8 @@ func NewFromPrior(key PRKey, pr vcs.PriorReview) *Store {
 	if pr.SummaryCommentID != "" {
 		m.summaries[summaryRefKey{PR: key, Tool: WrapperToolKey}] = pr.SummaryCommentID
 	}
+	if pr.LastReviewedSHA != "" {
+		m.lastReviewedSHA = pr.LastReviewedSHA
+	}
 	return &Store{mem: m}
 }

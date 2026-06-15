@@ -77,6 +77,54 @@ func TestFirstLine(t *testing.T) {
 	}
 }
 
+func TestRenderReviewedSHA(t *testing.T) {
+	sha := "aabbccddeeff00112233445566778899aabbccdd"
+	got := RenderReviewedSHA(sha)
+	want := "<!-- cadoo:reviewed-sha:" + sha + " -->"
+	if got != want {
+		t.Errorf("RenderReviewedSHA(%q) = %q; want %q", sha, got, want)
+	}
+}
+
+func TestParseReviewedSHA(t *testing.T) {
+	validSHA := "aabbccddeeff00112233445566778899aabbccdd"
+	body := SummaryWrapperBegin + "\n" + RenderReviewedSHA(validSHA) + "\nsome text"
+
+	// valid SHA round-trips
+	if got := ParseReviewedSHA(body); got != validSHA {
+		t.Errorf("ParseReviewedSHA(valid) = %q; want %q", got, validSHA)
+	}
+
+	// absent marker returns ""
+	if got := ParseReviewedSHA("no marker here"); got != "" {
+		t.Errorf("ParseReviewedSHA(absent) = %q; want \"\"", got)
+	}
+
+	// invalid: too short (39 chars)
+	short := "aabbccddeeff00112233445566778899aabbcc"
+	if got := ParseReviewedSHA("<!-- cadoo:reviewed-sha:" + short + " -->"); got != "" {
+		t.Errorf("ParseReviewedSHA(39-char) = %q; want \"\"", got)
+	}
+
+	// invalid: too long (41 chars)
+	long := "aabbccddeeff00112233445566778899aabbccdde"
+	if got := ParseReviewedSHA("<!-- cadoo:reviewed-sha:" + long + " -->"); got != "" {
+		t.Errorf("ParseReviewedSHA(41-char) = %q; want \"\"", got)
+	}
+
+	// invalid: uppercase
+	upper := "AABBCCDDEEFF00112233445566778899AABBCCDD"
+	if got := ParseReviewedSHA("<!-- cadoo:reviewed-sha:" + upper + " -->"); got != "" {
+		t.Errorf("ParseReviewedSHA(uppercase) = %q; want \"\"", got)
+	}
+
+	// invalid: non-hex char (g is not hex)
+	nonhex := "aabbccddeeff00112233445566778899aabbccgg"
+	if got := ParseReviewedSHA("<!-- cadoo:reviewed-sha:" + nonhex + " -->"); got != "" {
+		t.Errorf("ParseReviewedSHA(non-hex) = %q; want \"\"", got)
+	}
+}
+
 func TestPriorReviewShape(t *testing.T) {
 	pr := PriorReview{
 		SummaryCommentID: "42",

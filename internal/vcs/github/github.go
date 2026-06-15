@@ -313,6 +313,9 @@ func (a *Adapter) ListCadooArtifacts(ctx context.Context, pr *vcs.PullRequest) (
 			for _, c := range p.Comments.Nodes {
 				if out.SummaryCommentID == "" && strings.Contains(c.Body, vcs.SummaryWrapperBegin) {
 					out.SummaryCommentID = strconv.FormatInt(c.DatabaseID, 10)
+					if out.LastReviewedSHA == "" {
+						out.LastReviewedSHA = vcs.ParseReviewedSHA(c.Body)
+					}
 				}
 			}
 			if p.Comments.PageInfo.HasNextPage {

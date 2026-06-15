@@ -309,9 +309,54 @@ func (a *Adapter) OpenOrUpdatePR(ctx context.Context, repo, branch, base, title,
 	return int64(created.IID), nil
 }
 
+// DiffBetween returns the file changes between oldSHA and newSHA by reusing
+// the Repositories.Compare call from ListCommits. On any API error (including
+// when oldSHA is not an ancestor of newSHA) it returns (nil, nil) so the
+// orchestrator falls back to a full review (Assumption A3 / T-08-C2).
+func (a *Adapter) DiffBetween(ctx context.Context, repo, oldSHA, newSHA string) ([]vcs.FileChange, error) {
+	cmp, _, err := a.client.Repositories.Compare(repo, &glab.CompareOptions{
+		From: ptr(oldSHA),
+		To:   ptr(newSHA),
+	}, glab.WithContext(ctx))
+	if err != nil {
+		// Conservative fallback: non-ancestor / error → full review.
+		return nil, nil
+	}
+	if cmp == nil {
+		return nil, nil
+	}
+	out := make([]vcs.FileChange, 0, len(cmp.Diffs))
+	for _, d := range cmp.Diffs {
+		if d == nil {
+			continue
+		}
+		filePath := d.NewPath
+		if filePath == "" {
+			filePath = d.OldPath
+		}
+		status := "modified"
+		switch {
+		case d.NewFile:
+			status = "added"
+		case d.DeletedFile:
+			status = "removed"
+		case d.RenamedFile:
+			status = "renamed"
+		}
+		out = append(out, vcs.FileChange{
+			Path:     filePath,
+			PrevPath: d.OldPath,
+			Status:   status,
+			Patch:    d.Diff,
+		})
+	}
+	return out, nil
+}
+
 // Compile-time assertions: *Adapter must satisfy the optional capability
 // interfaces declared in internal/vcs/vcs.go.
 var _ vcs.ReleaseRangeReader = (*Adapter)(nil)
 var _ vcs.ReleasePublisher = (*Adapter)(nil)
 var _ vcs.TagReleasePublisher = (*Adapter)(nil)
 var _ vcs.BranchCommitter = (*Adapter)(nil)
+var _ vcs.DiffBetweener = (*Adapter)(nil)

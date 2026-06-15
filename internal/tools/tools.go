@@ -88,6 +88,24 @@ type Input struct {
 	// comments on this PR (across all prior dispatches). Tools surface it
 	// in the prompt so the model doesn't restate known issues.
 	PriorFindings []PriorFinding
+
+	// IncrementalFiles holds the file changes since the last reviewed SHA
+	// (fetched via vcs.DiffBetweener). Both IncrementalFiles and
+	// IncrementalPacked are nil/empty on a first run, after a force-push, or
+	// when the provider does not implement DiffBetweener. Inline-emitting
+	// tools should prefer these over Files/Packed when IsIncrementalRun is
+	// true; summary-only tools (describe, changelog) always use Files/Packed.
+	IncrementalFiles []vcs.FileChange
+
+	// IncrementalPacked is the packed context built from IncrementalFiles.
+	// Nil when IncrementalFiles is nil or empty.
+	IncrementalPacked contextengine.Compressed
+
+	// IsIncrementalRun is true when the orchestrator has a valid
+	// lastReviewedSHA and is limiting inline tools to the incremental
+	// change set. Tools that emit inline comments should scope their
+	// output to IncrementalFiles when this is true.
+	IsIncrementalRun bool
 }
 
 // Result is what a tool returns. Empty fields are treated as no-ops by the
