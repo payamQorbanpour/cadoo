@@ -5,13 +5,14 @@ import (
 	"testing"
 
 	"github.com/payamqorbanpour/cadoo/internal/findings"
+	"github.com/payamqorbanpour/cadoo/internal/vcs"
 )
 
 func TestRenderConsolidatedOrdersReviewFirst(t *testing.T) {
 	got := renderConsolidated([]findings.Section{
 		{Tool: "improve", Body: "imp"},
 		{Tool: "review", Body: "rev"},
-	})
+	}, "")
 	if !strings.Contains(got, wrapperBegin) || !strings.Contains(got, wrapperEnd) {
 		t.Errorf("missing wrapper markers: %s", got)
 	}
@@ -20,6 +21,36 @@ func TestRenderConsolidatedOrdersReviewFirst(t *testing.T) {
 	}
 	if !strings.Contains(got, "<details>") {
 		t.Errorf("sections should be collapsible: %s", got)
+	}
+}
+
+func TestRenderConsolidatedEmbedsReviewedSHA(t *testing.T) {
+	sha := "aabbccddeeff00112233445566778899aabbccdd"
+	got := renderConsolidated([]findings.Section{
+		{Tool: "review", Body: "findings"},
+	}, sha)
+	// SummaryWrapperBegin must be the first wrapper token
+	wrapperIdx := strings.Index(got, wrapperBegin)
+	if wrapperIdx < 0 {
+		t.Fatalf("wrapperBegin absent: %s", got)
+	}
+	// marker must be present and INSIDE the wrapper (after wrapperBegin)
+	markerStr := vcs.RenderReviewedSHA(sha)
+	markerIdx := strings.Index(got, markerStr)
+	if markerIdx < 0 {
+		t.Fatalf("reviewed-sha marker absent: %s", got)
+	}
+	if markerIdx < wrapperIdx {
+		t.Errorf("marker must appear AFTER wrapperBegin; wrapperIdx=%d markerIdx=%d", wrapperIdx, markerIdx)
+	}
+	// round-trip: ParseReviewedSHA must recover the SHA
+	if parsed := vcs.ParseReviewedSHA(got); parsed != sha {
+		t.Errorf("ParseReviewedSHA round-trip = %q; want %q", parsed, sha)
+	}
+	// empty headSHA → no marker
+	noSHA := renderConsolidated([]findings.Section{{Tool: "review", Body: "x"}}, "")
+	if strings.Contains(noSHA, "cadoo:reviewed-sha") {
+		t.Errorf("empty headSHA should not embed marker: %s", noSHA)
 	}
 }
 
