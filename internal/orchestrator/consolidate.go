@@ -59,8 +59,12 @@ var sectionEmoji = map[string]string{
 
 // renderConsolidated builds the single comment body that wraps every tool's
 // section. Sections are rendered as collapsible <details> blocks so the
-// comment stays compact by default but exposes detail on demand.
-func renderConsolidated(sections []findings.Section) string {
+// comment stays compact by default but exposes detail on demand. headSHA,
+// when non-empty, is embedded as a <!-- cadoo:reviewed-sha:<sha> --> marker
+// immediately after wrapperBegin so subsequent stateless CI runs can fetch
+// only the incremental diff since the last review (T-08-C3: marker stays
+// INSIDE the wrapper so SummaryWrapperBegin remains the first wrapper token).
+func renderConsolidated(sections []findings.Section, headSHA string) string {
 	sort.SliceStable(sections, func(i, j int) bool {
 		// Review first, then alphabetical by display title.
 		ti, tj := sections[i].Tool, sections[j].Tool
@@ -76,6 +80,10 @@ func renderConsolidated(sections []findings.Section) string {
 	var b strings.Builder
 	b.WriteString(wrapperBegin)
 	b.WriteString("\n")
+	if headSHA != "" {
+		b.WriteString(vcs.RenderReviewedSHA(headSHA))
+		b.WriteString("\n")
+	}
 	for _, s := range sections {
 		b.WriteString(renderSection(s))
 		b.WriteString("\n")

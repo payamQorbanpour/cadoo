@@ -137,7 +137,11 @@ type PriorReviewReader interface {
 // PriorReview is a normalized snapshot of Cadoo's prior footprint on a PR.
 type PriorReview struct {
 	SummaryCommentID string // overview comment/note id (found via SummaryWrapperBegin); "" if none
-	Inline           []PriorInline
+	// LastReviewedSHA is the head SHA embedded in the prior summary comment
+	// via RenderReviewedSHA. Empty when no prior summary exists or when the
+	// marker fails 40-hex validation (ParseReviewedSHA returns "" on tampered input).
+	LastReviewedSHA string
+	Inline          []PriorInline
 }
 
 // PriorInline is one previously-posted Cadoo inline finding.

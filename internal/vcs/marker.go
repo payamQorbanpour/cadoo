@@ -13,6 +13,47 @@ import (
 // adapters (which grep for it during stateless read-back).
 const SummaryWrapperBegin = "<!-- cadoo:wrapper:begin -->"
 
+// reviewedSHAPrefix and reviewedSHASuffix delimit the last-reviewed-SHA
+// marker embedded inside the consolidated summary wrapper. The SHA is
+// validated as exactly 40 lowercase hex chars before use (ASVS V5).
+const (
+	reviewedSHAPrefix = "<!-- cadoo:reviewed-sha:"
+	reviewedSHASuffix = " -->"
+)
+
+// reviewedSHARe validates that a candidate SHA is exactly 40 lowercase hex chars.
+var reviewedSHARe = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+// RenderReviewedSHA returns the HTML-comment marker that records which head
+// SHA was most recently reviewed. The marker is embedded inside the
+// consolidated summary wrapper, immediately after SummaryWrapperBegin, so
+// subsequent stateless CI runs can retrieve it via ParseReviewedSHA.
+func RenderReviewedSHA(sha string) string {
+	return reviewedSHAPrefix + sha + reviewedSHASuffix
+}
+
+// ParseReviewedSHA scans body for the reviewed-sha marker and returns the
+// embedded SHA only when it is exactly 40 lowercase hex characters. Any
+// other value (wrong length, uppercase, non-hex chars) returns "". This
+// validation prevents a forged PR comment from directing DiffBetween at an
+// arbitrary object (ASVS V5 / T-08-C1).
+func ParseReviewedSHA(body string) string {
+	idx := strings.Index(body, reviewedSHAPrefix)
+	if idx < 0 {
+		return ""
+	}
+	rest := body[idx+len(reviewedSHAPrefix):]
+	end := strings.Index(rest, reviewedSHASuffix)
+	if end < 0 {
+		return ""
+	}
+	candidate := rest[:end]
+	if !reviewedSHARe.MatchString(candidate) {
+		return ""
+	}
+	return candidate
+}
+
 // MarkerData is the machine payload embedded in every Cadoo inline comment
 // so a stateless CI run can recognise its own prior findings.
 type MarkerData struct {

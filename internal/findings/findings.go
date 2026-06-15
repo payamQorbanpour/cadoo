@@ -502,6 +502,10 @@ type memoryStore struct {
 	summaries map[summaryRefKey]string
 	sections  map[PRKey]map[string]string
 	path      string
+	// lastReviewedSHA is the head SHA embedded in the most recent summary
+	// comment. Seeded from PriorReview.LastReviewedSHA by NewFromPrior.
+	// Used by Plan 04 orchestrator wiring to determine the incremental diff base.
+	lastReviewedSHA string
 }
 
 type findingRec struct {

@@ -359,7 +359,7 @@ func (d *Dispatcher) postSummary(ctx context.Context, provider vcs.Provider, pr 
 		slog.Debug("all sections", "err", err)
 		sections = []findings.Section{{Tool: tool, Body: body}}
 	}
-	rendered := renderConsolidated(sections)
+	rendered := renderConsolidated(sections, pr.HeadSHA)
 
 	existing, err := d.Posted.SummaryID(ctx, key, findings.WrapperToolKey)
 	if err == nil && existing != "" {
