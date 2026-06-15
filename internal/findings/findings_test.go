@@ -263,3 +263,37 @@ func TestFirstLine(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// TestMemoryStoreListCarriesStructuralKey verifies that PostedFinding.StructuralKey
+// is populated from the findingRec after a RecordFinding + ListPostedFindings
+// round-trip. This covers the memory-store path that CI mode (no DB) uses.
+func TestMemoryStoreListCarriesStructuralKey(t *testing.T) {
+	s := NewMemory("")
+	ctx := context.Background()
+	key := PRKey{Provider: "gitlab", RepoFullName: "g/p", PRNumber: 99}
+
+	// Multi-line body — the kind whose key diverges from firstLine(body).
+	body := "**Suggestions:**\n- Fail fast on Kafka producer init error when enabled\n\n```suggestion\nif err != nil { return err }\n```"
+	c := vcs.InlineComment{
+		File:      "internal/api/run.go",
+		LineStart: 42,
+		LineEnd:   42,
+		Severity:  vcs.SeverityNit,
+		Body:      body,
+	}
+	wantKey := StructuralKey("improve", c)
+
+	if err := s.RecordFinding(ctx, key, "improve", "ext-1", c); err != nil {
+		t.Fatalf("RecordFinding: %v", err)
+	}
+	posted, err := s.ListPostedFindings(ctx, key)
+	if err != nil {
+		t.Fatalf("ListPostedFindings: %v", err)
+	}
+	if len(posted) != 1 {
+		t.Fatalf("expected 1 posted finding, got %d", len(posted))
+	}
+	if posted[0].StructuralKey != wantKey {
+		t.Errorf("StructuralKey = %q, want %q", posted[0].StructuralKey, wantKey)
+	}
+}
