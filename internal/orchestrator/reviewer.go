@@ -484,15 +484,21 @@ func (d *Dispatcher) resolveStalePriors(ctx context.Context, provider vcs.Provid
 		if p.Tool != tool || p.ExternalCommentID == "" {
 			continue
 		}
-		// Reconstruct an InlineComment shape so StructuralKey produces
-		// the same value it did when the prior was recorded. We only
-		// need the fields the key reads (file, severity, body's first
-		// line); the stored Title is exactly that first line.
-		pkey := findings.StructuralKey(p.Tool, vcs.InlineComment{
-			File:     p.File,
-			Severity: vcs.Severity(p.Severity),
-			Body:     p.Title,
-		})
+		// Compare the carried StructuralKey directly when available.
+		// Legacy records (written before StructuralKey was threaded into
+		// PostedFinding) have an empty field: fall back to the first-line
+		// recompute so they are not all mass-resolved on the first run
+		// after deploy (Pitfall-1 guard, T-08-A1).
+		var pkey string
+		if p.StructuralKey != "" {
+			pkey = p.StructuralKey
+		} else {
+			pkey = findings.StructuralKey(p.Tool, vcs.InlineComment{
+				File:     p.File,
+				Severity: vcs.Severity(p.Severity),
+				Body:     p.Title,
+			})
+		}
 		if _, present := currentKeys[pkey]; present {
 			continue
 		}
