@@ -149,6 +149,37 @@ func TestNilStoreIsNoop(t *testing.T) {
 	}
 }
 
+// TestLastReviewedSHANilSafeDispatch verifies that LastReviewedSHA() returns
+// the mem path value when seeded, "" on nil/pool paths.
+func TestLastReviewedSHANilSafeDispatch(t *testing.T) {
+	const sha = "aabbccddeeff001122334455667788990011aabb"
+	key := PRKey{Provider: "gitlab", RepoFullName: "g/p", PRNumber: 1}
+
+	// nil store → ""
+	var nilStore *Store
+	if got := nilStore.LastReviewedSHA(); got != "" {
+		t.Errorf("nil store LastReviewedSHA() = %q, want \"\"", got)
+	}
+
+	// pool-only store (mem == nil) → ""
+	poolStore := &Store{} // pool is nil too, but mem is nil → pool path
+	if got := poolStore.LastReviewedSHA(); got != "" {
+		t.Errorf("pool store LastReviewedSHA() = %q, want \"\"", got)
+	}
+
+	// mem store without SHA → ""
+	memEmpty := NewMemory("")
+	if got := memEmpty.LastReviewedSHA(); got != "" {
+		t.Errorf("empty mem store LastReviewedSHA() = %q, want \"\"", got)
+	}
+
+	// NewFromPrior with LastReviewedSHA set → returns the SHA
+	seeded := NewFromPrior(key, vcs.PriorReview{LastReviewedSHA: sha})
+	if got := seeded.LastReviewedSHA(); got != sha {
+		t.Errorf("seeded LastReviewedSHA() = %q, want %q", got, sha)
+	}
+}
+
 func TestMemoryStoreDedupesExactRepost(t *testing.T) {
 	s := NewMemory("")
 	ctx := context.Background()

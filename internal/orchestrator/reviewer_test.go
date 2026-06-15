@@ -363,6 +363,10 @@ type scenarioVCS struct {
 	resolved        []string
 	postSummaryFn   func(ctx context.Context, pr *vcs.PullRequest, body string) (string, error)
 	updateSummaryFn func(ctx context.Context, pr *vcs.PullRequest, id, body string) error
+	// diffBetweenFn is an optional DiffBetweener implementation.
+	// When non-nil, scenarioVCS satisfies vcs.DiffBetweener and delegates to it.
+	// When nil, DiffBetween is not implemented (provider falls back to full review).
+	diffBetweenFn func(ctx context.Context, repo, oldSHA, newSHA string) ([]vcs.FileChange, error)
 }
 
 func (s *scenarioVCS) PostInlineComments(_ context.Context, _ *vcs.PullRequest, cs []vcs.InlineComment) ([]vcs.PostedInlineRef, error) {
@@ -391,8 +395,23 @@ func (s *scenarioVCS) ResolveThread(_ context.Context, _ *vcs.PullRequest, id st
 	s.resolved = append(s.resolved, id)
 	return nil
 }
+
+// DiffBetween implements vcs.DiffBetweener when diffBetweenFn is set.
+// This allows tests to configure the incremental-diff response per scenario.
+func (s *scenarioVCS) DiffBetween(ctx context.Context, repo, oldSHA, newSHA string) ([]vcs.FileChange, error) {
+	if s.diffBetweenFn != nil {
+		return s.diffBetweenFn(ctx, repo, oldSHA, newSHA)
+	}
+	return nil, nil
+}
+
 func (s *scenarioVCS) replay() vcs.PriorReview {
-	pr := vcs.PriorReview{SummaryCommentID: s.summaryID}
+	pr := vcs.PriorReview{
+		SummaryCommentID: s.summaryID,
+		// Parse LastReviewedSHA from the stamped summary body so Run 2
+		// exercises the incremental dispatch path (Plan 04 Task 1 extension).
+		LastReviewedSHA: vcs.ParseReviewedSHA(s.summaryBody),
+	}
 	for i, c := range s.inline {
 		md, stripped, _ := vcs.ParseInlineMarker(c.Body)
 		pr.Inline = append(pr.Inline, vcs.PriorInline{
@@ -534,6 +553,218 @@ func TestCIModeSuppressesRephrasedImproveOnPush2(t *testing.T) {
 
 	if len(sv.inline) != 0 {
 		t.Errorf("push2: rephrased improve suggestion was not deduped; got %d new posts (expected 0)", len(sv.inline))
+	}
+}
+
+// diffCountVCS wraps scenarioVCS and counts DiffBetween calls so tests can
+// assert the orchestrator exercised the incremental-diff path.
+type diffCountVCS struct {
+	scenarioVCS
+	diffCalls int
+}
+
+func (d *diffCountVCS) DiffBetween(ctx context.Context, repo, oldSHA, newSHA string) ([]vcs.FileChange, error) {
+	d.diffCalls++
+	return d.diffBetweenFn(ctx, repo, oldSHA, newSHA)
+}
+
+// runDispatcherRun executes d.Run with a single capturingTool registered
+// under name "review" and returns the captured Input and the scenario VCS.
+// headSHA is set on the PR so the reviewed-sha marker round-trips.
+func runFullRun(ctx context.Context, t *testing.T, d *Dispatcher, sv *scenarioVCS, pr *vcs.PullRequest, comments []vcs.InlineComment) *tools.Input {
+	t.Helper()
+	ct := &capturingTool{name: "review", res: &tools.Result{
+		Summary:        "## Overview\npass",
+		InlineComments: comments,
+	}}
+	reg := tools.NewRegistry()
+	reg.Register(ct)
+	d.Registry = reg
+	d.VCSPool = map[vcs.Kind]vcs.Provider{vcs.KindGitLab: sv}
+	d.LLM = &fakeLLM{}
+	d.BaseCfg = config.Default()
+	d.Model = "test-model"
+	if err := d.Run(ctx, ToolJob{
+		Tool: "review", Provider: vcs.KindGitLab,
+		RepoFullName: pr.RepoFullName, PRNumber: pr.Number,
+	}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	return ct.got
+}
+
+// TestCIModeFixedPointUnchangedHead verifies the convergence fixed-point:
+// a second run against the SAME head SHA (DiffBetween returns empty slice)
+// must post 0 new inline comments and resolve 0 existing threads.
+// The captured tool.Input must show IsIncrementalRun=true with an empty
+// change set so inline tools know to skip.
+// RED: without incremental dispatch block in Run, IsIncrementalRun is always
+// false and the test fails.
+func TestCIModeFixedPointUnchangedHead(t *testing.T) {
+	ctx := context.Background()
+	const headSHA = "aabbccddeeff001122334455667788990011aabb"
+	pr := &vcs.PullRequest{
+		RepoFullName: "g/p", Number: 10, HeadSHA: headSHA,
+		Provider: vcs.KindGitLab,
+	}
+	key := findings.PRKey{Provider: "gitlab", RepoFullName: "g/p", PRNumber: 10}
+
+	c1 := vcs.InlineComment{File: "a.go", LineStart: 1, Severity: vcs.SeverityWarn, Body: "Finding A on a.go"}
+	c2 := vcs.InlineComment{File: "b.go", LineStart: 5, Severity: vcs.SeverityNit, Body: "Finding B on b.go"}
+
+	// --- Run 1: fresh review, no prior store. ---
+	sv := &scenarioVCS{}
+	sv.fakeVCS.kind = vcs.KindGitLab
+	sv.fakeVCS.pr = pr
+	sv.fakeVCS.files = []vcs.FileChange{
+		{Path: "a.go", Patch: "diff"},
+		{Path: "b.go", Patch: "diff"},
+	}
+	// DiffBetween returns empty slice to simulate unchanged head.
+	sv.diffBetweenFn = func(_ context.Context, _, _, _ string) ([]vcs.FileChange, error) {
+		return []vcs.FileChange{}, nil
+	}
+
+	d1 := &Dispatcher{Posted: findings.NewFromPrior(key, vcs.PriorReview{})}
+	runFullRun(ctx, t, d1, sv, pr, []vcs.InlineComment{c1, c2})
+
+	inlineCntAfterRun1 := len(sv.inline)
+	if inlineCntAfterRun1 != 2 {
+		t.Fatalf("run1: expected 2 inline posts, got %d", inlineCntAfterRun1)
+	}
+
+	// --- Run 2: replay prior; DiffBetween returns empty (same head). ---
+	prior := sv.replay()
+	if prior.LastReviewedSHA == "" {
+		t.Logf("Note: LastReviewedSHA not set in replay (expected with reviewed-sha marker)")
+	}
+	// Force a non-empty LastReviewedSHA to exercise the incremental dispatch.
+	// The same headSHA triggers the fast-path: sha == pr.HeadSHA → empty incremental.
+	prior.LastReviewedSHA = headSHA
+	sv.inline = nil
+	sv.resolved = nil
+
+	d2 := &Dispatcher{Posted: findings.NewFromPrior(key, prior)}
+	in2 := runFullRun(ctx, t, d2, sv, pr, []vcs.InlineComment{c1, c2})
+
+	// The fixed-point assertion: Run 2 against unchanged head (sha == headSHA
+	// so the guard sha != pr.HeadSHA fires) → empty incremental change set →
+	// IsIncrementalRun=true, tool.Input.IncrementalFiles empty.
+	if !in2.IsIncrementalRun {
+		t.Errorf("run2: expected IsIncrementalRun=true for unchanged head (sha==headSHA guard), got false")
+	}
+	if len(sv.inline) != 0 {
+		t.Errorf("run2 unchanged head: expected 0 new inline posts, got %d: %v", len(sv.inline), sv.inline)
+	}
+	if len(sv.resolved) != 0 {
+		t.Errorf("run2 unchanged head: expected 0 resolved threads, got %d: %v", len(sv.resolved), sv.resolved)
+	}
+}
+
+// TestCIModeIncrementalChangedLines verifies that when Run 2 has a 1-file
+// incremental change set (DiffBetween returns only a.go), priors on untouched
+// files (b.go) are NOT resolved — they persist as open threads.
+// RED: without the changeSet parameter in resolveStalePriors, the b.go prior
+// would be resolved (because the tool only emits findings for a.go on Run 2).
+func TestCIModeIncrementalChangedLines(t *testing.T) {
+	ctx := context.Background()
+	const oldSHA = "0000000000000000000000000000000000000001"
+	const newSHA = "1111111111111111111111111111111111111111"
+	pr := &vcs.PullRequest{
+		RepoFullName: "g/p", Number: 11, HeadSHA: newSHA,
+		Provider: vcs.KindGitLab,
+	}
+	key := findings.PRKey{Provider: "gitlab", RepoFullName: "g/p", PRNumber: 11}
+
+	cA := vcs.InlineComment{File: "a.go", LineStart: 1, Severity: vcs.SeverityWarn, Body: "Finding A on a.go"}
+	cB := vcs.InlineComment{File: "b.go", LineStart: 5, Severity: vcs.SeverityNit, Body: "Finding B on b.go"}
+
+	// --- Run 1: full review with 2 files. ---
+	sv := &scenarioVCS{}
+	sv.fakeVCS.kind = vcs.KindGitLab
+	sv.fakeVCS.pr = pr
+	sv.fakeVCS.files = []vcs.FileChange{
+		{Path: "a.go", Patch: "diff"},
+		{Path: "b.go", Patch: "diff"},
+	}
+	// DiffBetween will only be called in Run 2; for Run 1 use non-ancestor (nil,nil) → full review.
+	sv.diffBetweenFn = func(_ context.Context, _, _, _ string) ([]vcs.FileChange, error) {
+		return nil, nil
+	}
+
+	d1 := &Dispatcher{Posted: findings.NewFromPrior(key, vcs.PriorReview{})}
+	runFullRun(ctx, t, d1, sv, pr, []vcs.InlineComment{cA, cB})
+	if len(sv.inline) != 2 {
+		t.Fatalf("run1: expected 2 inline posts, got %d", len(sv.inline))
+	}
+
+	// --- Run 2: incremental — only a.go changed since oldSHA. ---
+	prior := sv.replay()
+	prior.LastReviewedSHA = oldSHA // a different SHA → non-empty incremental path
+	sv.inline = nil
+	sv.resolved = nil
+	// DiffBetween now returns only a.go.
+	sv.diffBetweenFn = func(_ context.Context, _, _, _ string) ([]vcs.FileChange, error) {
+		return []vcs.FileChange{{Path: "a.go", Patch: "+new line", Status: "modified"}}, nil
+	}
+
+	// Tool returns only a.go finding (b.go was not changed — tool wouldn't review it).
+	d2 := &Dispatcher{Posted: findings.NewFromPrior(key, prior)}
+	in2 := runFullRun(ctx, t, d2, sv, pr, []vcs.InlineComment{cA})
+
+	// The incremental path must be active.
+	if !in2.IsIncrementalRun {
+		t.Errorf("run2: expected IsIncrementalRun=true, got false")
+	}
+	// b.go prior must NOT be resolved (it's on an untouched file).
+	for _, id := range sv.resolved {
+		// T2 was the b.go finding in Run 1 (2nd inline post → T2).
+		if id == "T2" {
+			t.Errorf("run2: b.go prior (T2) was resolved — priors on untouched files must persist")
+		}
+	}
+}
+
+// TestDiffBetweenFallbackOnNonAncestor verifies that when DiffBetween returns
+// (nil, nil) — indicating oldSHA is not an ancestor of newSHA (e.g. force-push)
+// — the orchestrator falls back to a full review (IsIncrementalRun=false) so
+// no changed code is silently skipped.
+// RED: without the incremental dispatch block, DiffBetween is never called.
+// The test asserts DiffBetween IS called and that IsIncrementalRun is false.
+func TestDiffBetweenFallbackOnNonAncestor(t *testing.T) {
+	ctx := context.Background()
+	const oldSHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	const newSHA = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	pr := &vcs.PullRequest{
+		RepoFullName: "g/p", Number: 12, HeadSHA: newSHA,
+		Provider: vcs.KindGitLab,
+	}
+	key := findings.PRKey{Provider: "gitlab", RepoFullName: "g/p", PRNumber: 12}
+
+	cA := vcs.InlineComment{File: "a.go", LineStart: 1, Severity: vcs.SeverityWarn, Body: "Finding A"}
+
+	var diffCalled int
+	sv := &diffCountVCS{}
+	sv.fakeVCS.kind = vcs.KindGitLab
+	sv.fakeVCS.pr = pr
+	sv.fakeVCS.files = []vcs.FileChange{{Path: "a.go", Patch: "diff"}}
+	sv.diffBetweenFn = func(_ context.Context, _, _, _ string) ([]vcs.FileChange, error) {
+		diffCalled++
+		return nil, nil // non-ancestor → full-review fallback
+	}
+
+	// Seed store with a prior SHA different from newSHA.
+	priorStore := findings.NewFromPrior(key, vcs.PriorReview{LastReviewedSHA: oldSHA})
+	d := &Dispatcher{Posted: priorStore}
+	in := runFullRun(ctx, t, d, &sv.scenarioVCS, pr, []vcs.InlineComment{cA})
+
+	// DiffBetween must have been called (the orchestrator tried the incremental path).
+	if diffCalled == 0 {
+		t.Errorf("DiffBetween was never called — orchestrator did not probe the incremental path")
+	}
+	// On (nil,nil) return, full review must proceed (IsIncrementalRun=false).
+	if in.IsIncrementalRun {
+		t.Errorf("expected IsIncrementalRun=false after (nil,nil) DiffBetween, got true")
 	}
 }
 

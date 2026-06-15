@@ -242,6 +242,21 @@ func (s *Store) ListPostedFindings(ctx context.Context, key PRKey) ([]PostedFind
 	return out, rows.Err()
 }
 
+// LastReviewedSHA returns the head SHA embedded in the most recent summary
+// comment (set via RenderReviewedSHA in consolidate). Returns "" when the
+// store is nil, pool-backed (DB path always returns "" — CI-mode only uses
+// mem), or when no prior summary has been seen yet.
+func (s *Store) LastReviewedSHA() string {
+	if s == nil {
+		return ""
+	}
+	if s.mem != nil {
+		return s.mem.lastReviewedSHA
+	}
+	// Pool path: DB-backed store does full reviews per SPEC Open Question 2.
+	return ""
+}
+
 // SummaryID returns the prior summary-comment external ID for (PR, tool), or
 // empty if none.
 func (s *Store) SummaryID(ctx context.Context, key PRKey, tool string) (string, error) {
