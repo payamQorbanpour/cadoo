@@ -553,11 +553,33 @@ func (m *memoryStore) has(key PRKey, tool string, c vcs.InlineComment) bool {
 		if r.Tool != tool || r.File != c.File || r.Severity != string(c.Severity) {
 			continue
 		}
-		if r.StructuralKey == wantKey {
-			return true
-		}
-		if jaccard(wantTokens, tokenize(r.NormalizedTitle)) >= SimilarTitleThreshold {
-			return true
+		if !r.Resolved {
+			// Open prior: existing rule — exact StructuralKey match OR Jaccard
+			// score above SimilarTitleThreshold (0.5).
+			if r.StructuralKey == wantKey {
+				return true
+			}
+			if jaccard(wantTokens, tokenize(r.NormalizedTitle)) >= SimilarTitleThreshold {
+				return true
+			}
+		} else {
+			// Resolved prior: widened rule scoped to (tool, file) overlapping
+			// lines OR Jaccard >= ResolvedSuppressThreshold (0.3). This suppresses
+			// LLM rewording of a user-resolved thread so it stays gone.
+			//
+			// Line-overlap check: the new comment's line range must bracket the
+			// prior's anchor line. If the prior has no anchor (r.Line == 0) or
+			// the new comment has no anchor (c.LineStart == 0), skip the
+			// geometric check and fall through to Jaccard only — safe
+			// degradation per Pitfall 6 in RESEARCH.md.
+			if r.Line > 0 && c.LineStart > 0 {
+				if c.LineStart <= r.Line && r.Line <= c.LineEnd {
+					return true
+				}
+			}
+			if jaccard(wantTokens, tokenize(r.NormalizedTitle)) >= ResolvedSuppressThreshold {
+				return true
+			}
 		}
 	}
 	return false
