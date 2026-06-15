@@ -246,7 +246,7 @@ func (a *Adapter) ListCadooArtifacts(ctx context.Context, pr *vcs.PullRequest) (
 	  repository(owner:$owner,name:$name){ pullRequest(number:$num){
 	    comments(first:100,after:$tc){ nodes{ databaseId body }
 	      pageInfo{ hasNextPage endCursor } }
-	    reviewThreads(first:100,after:$rc){ nodes{ id isResolved
+	    reviewThreads(first:100,after:$rc){ nodes{ id isResolved line originalLine
 	      comments(first:1){ nodes{ path body } } }
 	      pageInfo{ hasNextPage endCursor } }
 	  }}}`
@@ -268,7 +268,14 @@ func (a *Adapter) ListCadooArtifacts(ctx context.Context, pr *vcs.PullRequest) (
 					Nodes []struct {
 						ID         string `json:"id"`
 						IsResolved bool   `json:"isResolved"`
-						Comments   struct {
+						// Line is the current-side line number for the thread. Nullable
+						// per GitHub GraphQL schema (threads on deleted lines return null).
+						Line *int `json:"line"`
+						// OrigLine is the original line number before any rebase. Nullable
+						// for the same reason as Line. Currently unused for suppression but
+						// captured for future reference.
+						OrigLine *int `json:"originalLine"`
+						Comments struct {
 							Nodes []struct {
 								Path string `json:"path"`
 								Body string `json:"body"`
@@ -325,6 +332,13 @@ func (a *Adapter) ListCadooArtifacts(ctx context.Context, pr *vcs.PullRequest) (
 					continue
 				}
 				orig := strings.TrimPrefix(stripped, formatSeverity(vcs.Severity(md.Sev)))
+				// Nil-safe deref for line: GitHub returns null for threads on
+				// deleted lines or threads created on older API versions (Pitfall 6).
+				// Zero means "unknown anchor" — memoryStore.has guards r.Line > 0.
+				var anchorLine int
+				if th.Line != nil {
+					anchorLine = *th.Line
+				}
 				out.Inline = append(out.Inline, vcs.PriorInline{
 					Tool:            md.Tool,
 					File:            first.Path,
@@ -334,6 +348,8 @@ func (a *Adapter) ListCadooArtifacts(ctx context.Context, pr *vcs.PullRequest) (
 					NormalizedTitle: md.NT,
 					ExternalID:      th.ID,
 					Resolved:        th.IsResolved,
+					Line:            anchorLine,
+					EndLine:         anchorLine,
 				})
 			}
 			if p.ReviewThreads.PageInfo.HasNextPage {

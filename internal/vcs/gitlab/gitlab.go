@@ -261,6 +261,8 @@ func (a *Adapter) ListCadooArtifacts(ctx context.Context, pr *vcs.PullRequest) (
 						NormalizedTitle: md.NT,
 						ExternalID:      d.ID,
 						Resolved:        n.Resolved,
+						Line:            int(n.Position.NewLine),
+						EndLine:         int(n.Position.NewLine),
 					})
 					continue
 				}
