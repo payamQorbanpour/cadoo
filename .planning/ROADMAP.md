@@ -121,7 +121,11 @@ Plans:
   2. `resolveStalePriors` no longer resolves still-valid multi-line threads — the carried `StructuralKey` is compared directly (no first-line recompute), and the fix applies to both the CI memory-store and DB-backed worker paths.
   3. A thread resolved by the user (or by Cadoo) stays gone: a reworded duplicate in the same `(tool, file)` with line-overlap or Jaccard ≥ `ResolvedSuppressThreshold` is suppressed, while an unrelated new finding elsewhere in the file is still posted.
   4. Inline-emitting tools review only the `lastReviewedSHA..head` change set (persisted via `<!-- cadoo:reviewed-sha:<sha> -->`); first-run / non-ancestor SHA falls back to full review; `resolveStalePriors` only resolves priors whose anchor line is inside the incremental change set.
-**Plans**: TBD
+**Plans**: 4 plans (4 waves)
+  - [ ] 08-01-PLAN.md — Part A: carry StructuralKey end-to-end; resolveStalePriors direct compare (no self-resolution; fixes CI + DB paths)
+  - [ ] 08-02-PLAN.md — Part B: capture anchor line + resolved flag; widen memoryStore.has for sticky suppression of resolved threads
+  - [ ] 08-03-PLAN.md — Part C infra: reviewed-sha marker (40-hex validated), DiffBetweener in both adapters, tools.Input dual-context
+  - [ ] 08-04-PLAN.md — Part C orchestration + convergence fixed-point test: incremental dispatch, changeSet-scoped resolveStalePriors
 **UI hint**: no
 
 ## Progress
