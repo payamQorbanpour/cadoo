@@ -124,7 +124,7 @@ Plans:
 **Plans**: 4 plans (4 waves)
   - [x] 08-01-PLAN.md — Part A: carry StructuralKey end-to-end; resolveStalePriors direct compare (no self-resolution; fixes CI + DB paths)
   - [x] 08-02-PLAN.md — Part B: capture anchor line + resolved flag; widen memoryStore.has for sticky suppression of resolved threads
-  - [ ] 08-03-PLAN.md — Part C infra: reviewed-sha marker (40-hex validated), DiffBetweener in both adapters, tools.Input dual-context
+  - [x] 08-03-PLAN.md — Part C infra: reviewed-sha marker (40-hex validated), DiffBetweener in both adapters, tools.Input dual-context
   - [ ] 08-04-PLAN.md — Part C orchestration + convergence fixed-point test: incremental dispatch, changeSet-scoped resolveStalePriors
 **UI hint**: no
 
@@ -142,4 +142,4 @@ Shipped: v1.0 (Phases 1-3), v1.1 (Phase 7). Active milestone v2.0 runs in numeri
 | 4. Embedded Local Review + Plugin | v2.0 | 0/TBD | Not started | - |
 | 5. Live PR/MR Review | v2.0 | 0/TBD | Not started | - |
 | 6. Connected Mode | v2.0 | 0/TBD | Not started | - |
-| 8. CI-Mode Dedup Convergence | v2.1 | 2/4 | In Progress|  |
+| 8. CI-Mode Dedup Convergence | v2.1 | 3/4 | In Progress|  |
