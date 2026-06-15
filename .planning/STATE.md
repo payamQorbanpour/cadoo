@@ -4,8 +4,8 @@ milestone: v1.1
 milestone_name: Release-Docs Engineering Diagrams
 status: executing
 stopped_at: Completed 07-03-PLAN.md (Phase 7 complete)
-last_updated: "2026-06-15T08:56:45.913Z"
-last_activity: 2026-06-15 -- Phase 8 planning complete
+last_updated: "2026-06-15T10:51:08.892Z"
+last_activity: 2026-06-15 -- Phase 08 execution started
 progress:
   total_phases: 4
   completed_phases: 1
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-10)
 
 **Core value:** A maintainer can publish auto-generated software-engineering diagrams (sequence, dependency, state, flowchart, class) as part of release docs, choosing which diagram types to ship per repo.
-**Current focus:** Milestone complete
+**Current focus:** Phase 08 — ci-mode-dedup-convergence
 
 ## Current Position
 
-Phase: Milestone v1.1 complete
-Plan: —
-Status: Ready to execute
-Last activity: 2026-06-15 -- Phase 8 planning complete
+Phase: 08 (ci-mode-dedup-convergence) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 08
+Last activity: 2026-06-15 -- Phase 08 execution started
 
 ## Performance Metrics
 

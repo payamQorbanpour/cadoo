@@ -122,7 +122,7 @@ Plans:
   3. A thread resolved by the user (or by Cadoo) stays gone: a reworded duplicate in the same `(tool, file)` with line-overlap or Jaccard ≥ `ResolvedSuppressThreshold` is suppressed, while an unrelated new finding elsewhere in the file is still posted.
   4. Inline-emitting tools review only the `lastReviewedSHA..head` change set (persisted via `<!-- cadoo:reviewed-sha:<sha> -->`); first-run / non-ancestor SHA falls back to full review; `resolveStalePriors` only resolves priors whose anchor line is inside the incremental change set.
 **Plans**: 4 plans (4 waves)
-  - [ ] 08-01-PLAN.md — Part A: carry StructuralKey end-to-end; resolveStalePriors direct compare (no self-resolution; fixes CI + DB paths)
+  - [x] 08-01-PLAN.md — Part A: carry StructuralKey end-to-end; resolveStalePriors direct compare (no self-resolution; fixes CI + DB paths)
   - [ ] 08-02-PLAN.md — Part B: capture anchor line + resolved flag; widen memoryStore.has for sticky suppression of resolved threads
   - [ ] 08-03-PLAN.md — Part C infra: reviewed-sha marker (40-hex validated), DiffBetweener in both adapters, tools.Input dual-context
   - [ ] 08-04-PLAN.md — Part C orchestration + convergence fixed-point test: incremental dispatch, changeSet-scoped resolveStalePriors
@@ -142,4 +142,4 @@ Shipped: v1.0 (Phases 1-3), v1.1 (Phase 7). Active milestone v2.0 runs in numeri
 | 4. Embedded Local Review + Plugin | v2.0 | 0/TBD | Not started | - |
 | 5. Live PR/MR Review | v2.0 | 0/TBD | Not started | - |
 | 6. Connected Mode | v2.0 | 0/TBD | Not started | - |
-| 8. CI-Mode Dedup Convergence | v2.1 | 0/TBD | Queued | - |
+| 8. CI-Mode Dedup Convergence | v2.1 | 1/4 | In Progress|  |
