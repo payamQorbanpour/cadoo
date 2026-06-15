@@ -614,9 +614,9 @@ func TestCIModeFixedPointUnchangedHead(t *testing.T) {
 
 	// --- Run 1: fresh review, no prior store. ---
 	sv := &scenarioVCS{}
-	sv.fakeVCS.kind = vcs.KindGitLab
-	sv.fakeVCS.pr = pr
-	sv.fakeVCS.files = []vcs.FileChange{
+	sv.kind = vcs.KindGitLab
+	sv.pr = pr
+	sv.files = []vcs.FileChange{
 		{Path: "a.go", Patch: "diff"},
 		{Path: "b.go", Patch: "diff"},
 	}
@@ -681,9 +681,9 @@ func TestCIModeIncrementalChangedLines(t *testing.T) {
 
 	// --- Run 1: full review with 2 files. ---
 	sv := &scenarioVCS{}
-	sv.fakeVCS.kind = vcs.KindGitLab
-	sv.fakeVCS.pr = pr
-	sv.fakeVCS.files = []vcs.FileChange{
+	sv.kind = vcs.KindGitLab
+	sv.pr = pr
+	sv.files = []vcs.FileChange{
 		{Path: "a.go", Patch: "diff"},
 		{Path: "b.go", Patch: "diff"},
 	}
@@ -745,9 +745,9 @@ func TestDiffBetweenFallbackOnNonAncestor(t *testing.T) {
 
 	var diffCalled int
 	sv := &diffCountVCS{}
-	sv.fakeVCS.kind = vcs.KindGitLab
-	sv.fakeVCS.pr = pr
-	sv.fakeVCS.files = []vcs.FileChange{{Path: "a.go", Patch: "diff"}}
+	sv.kind = vcs.KindGitLab
+	sv.pr = pr
+	sv.files = []vcs.FileChange{{Path: "a.go", Patch: "diff"}}
 	sv.diffBetweenFn = func(_ context.Context, _, _, _ string) ([]vcs.FileChange, error) {
 		diffCalled++
 		return nil, nil // non-ancestor → full-review fallback
