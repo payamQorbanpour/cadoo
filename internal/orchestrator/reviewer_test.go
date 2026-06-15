@@ -449,6 +449,53 @@ func TestCIModeTwoRunIdempotency(t *testing.T) {
 	}
 }
 
+// TestResolveStalePriorsMultiLineNotSelfResolved is the regression test for the
+// Part-A bug: resolveStalePriors reconstructed the prior's StructuralKey from
+// p.Title (first line of the body only), while current-run keys are built from
+// the full body. For multi-line "improve"-style comments the keys diverged and
+// every still-valid thread was treated as stale and auto-resolved.
+//
+// This test seeds a prior with a multi-line body and then runs postInline with
+// the SAME comment (same full body). The provider's resolved list must be empty
+// — the thread must NOT be self-resolved.
+func TestResolveStalePriorsMultiLineNotSelfResolved(t *testing.T) {
+	ctx := context.Background()
+	fv := &fakeVCS{
+		kind: vcs.KindGitLab,
+		pr:   &vcs.PullRequest{RepoFullName: "g/p", Number: 2, HeadSHA: "abc"},
+	}
+	d := &Dispatcher{
+		VCSPool: map[vcs.Kind]vcs.Provider{vcs.KindGitLab: fv},
+		Posted:  findings.NewMemory(""),
+	}
+	pr := fv.pr
+	key := findings.PRKey{Provider: string(vcs.KindGitLab), RepoFullName: "g/p", PRNumber: 2}
+
+	// Multi-line body (>= 2 lines) so firstLine(body) != full body.
+	// This is the classic "improve"-style finding that triggers the bug.
+	multiLineBody := "**Suggestions:**\n- Fail fast on Kafka producer init error when enabled\n\n```suggestion\nif err != nil { return err }\n```"
+
+	comment := vcs.InlineComment{
+		File:      "internal/v1/api/run.go",
+		LineStart: 42,
+		LineEnd:   42,
+		Severity:  vcs.SeverityNit,
+		Body:      multiLineBody,
+	}
+
+	// Seed the Posted store with this prior, including an ExternalCommentID
+	// so resolveStalePriors has something to resolve against.
+	_ = d.Posted.RecordFinding(ctx, key, "improve", "disc-multi-1", comment)
+
+	// Run postInline with the SAME comment — it is still present in the
+	// current run. resolveStalePriors must NOT resolve the thread.
+	d.postInline(ctx, fv, pr, key, "improve", []vcs.InlineComment{comment})
+
+	if len(fv.resolved) != 0 {
+		t.Errorf("multi-line still-present thread was self-resolved: %v", fv.resolved)
+	}
+}
+
 // TestCIModeSuppressesRephrasedImproveOnPush2 is the regression test for the
 // CI-mode runaway duplication bug: "improve" suggestions were re-posted on
 // every push because the seeded in-memory store only stored the first-line
