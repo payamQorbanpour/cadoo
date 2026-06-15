@@ -107,6 +107,71 @@ func TestNewFromPriorJaccardWithNT(t *testing.T) {
 	}
 }
 
+// TestNewFromPriorCarriesResolvedAndLine verifies that NewFromPrior seeds the
+// findingRec with Resolved=true and the anchor Line from PriorInline, and that
+// HasFinding subsequently suppresses a reworded restatement of the resolved
+// finding on the same line via the sticky-suppression path in memoryStore.has.
+//
+// The test uses a pair of bodies with Jaccard ~0.40: above
+// ResolvedSuppressThreshold (0.3) but below SimilarTitleThreshold (0.5), so
+// the suppression can only happen via the new resolved-prior branch.
+func TestNewFromPriorCarriesResolvedAndLine(t *testing.T) {
+	ctx := context.Background()
+	key := PRKey{Provider: "gitlab", RepoFullName: "g/p", PRNumber: 10}
+
+	// Prior body tokens: {goroutine, leak, handler} — 3 tokens.
+	// New body tokens: {goroutine, leak, shutdown, timeout} — 4 tokens.
+	// Jaccard = |{goroutine, leak}| / |{goroutine, leak, handler, shutdown, timeout}| = 2/5 = 0.40.
+	priorBody := "goroutine leak in handler"
+	s := NewFromPrior(key, vcs.PriorReview{
+		Inline: []vcs.PriorInline{{
+			Tool:            "review",
+			File:            "client.go",
+			Severity:        "warn",
+			StructuralKey:   "sk-carry-test",
+			NormalizedTitle: normalizeTitle(priorBody),
+			Title:           firstLine(priorBody),
+			ExternalID:      "disc-resolved",
+			Resolved:        true,
+			Line:            25,
+			EndLine:         25,
+		}},
+	})
+
+	// Same line, Jaccard ~0.40 (above 0.3, below 0.5) — should be suppressed
+	// via the resolved-prior branch that Task 3 introduces.
+	reworded := vcs.InlineComment{
+		File:      "client.go",
+		Severity:  vcs.SeverityWarn,
+		Body:      "goroutine leak on shutdown timeout",
+		LineStart: 25,
+		LineEnd:   25,
+	}
+	has, err := s.HasFinding(ctx, key, "review", reworded)
+	if err != nil {
+		t.Fatalf("HasFinding error: %v", err)
+	}
+	if !has {
+		t.Error("NewFromPrior must carry Resolved+Line so a same-line restatement (Jaccard >= 0.3) is suppressed")
+	}
+
+	// Different line, zero token overlap — must NOT be suppressed.
+	unrelated := vcs.InlineComment{
+		File:      "client.go",
+		Severity:  vcs.SeverityWarn,
+		Body:      "Unbounded goroutine pool risks memory exhaustion under heavy throughput",
+		LineStart: 80,
+		LineEnd:   80,
+	}
+	has2, err := s.HasFinding(ctx, key, "review", unrelated)
+	if err != nil {
+		t.Fatalf("HasFinding (unrelated) error: %v", err)
+	}
+	if has2 {
+		t.Error("unrelated finding at a different line must NOT be suppressed by the resolved prior")
+	}
+}
+
 // TestNewFromPriorJaccardLegacyFallback ensures that legacy markers (without
 // nt= field, NormalizedTitle=="") still work for exact SK matches (regression
 // guard for backward compatibility with push-1 comments posted before the fix).

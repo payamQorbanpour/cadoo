@@ -297,3 +297,163 @@ func TestMemoryStoreListCarriesStructuralKey(t *testing.T) {
 		t.Errorf("StructuralKey = %q, want %q", posted[0].StructuralKey, wantKey)
 	}
 }
+
+// TestMemoryStoreHasResolvedSuppressesSameFile verifies that a resolved prior
+// thread suppresses a reworded restatement of the same finding when the new
+// comment lands on the same anchor line, even when the Jaccard score is below
+// the open-prior SimilarTitleThreshold (0.5) but at or above the
+// ResolvedSuppressThreshold (0.3). This is the key behaviour that current code
+// (no resolved branch) does NOT implement — the test is RED before Task 3.
+func TestMemoryStoreHasResolvedSuppressesSameFile(t *testing.T) {
+	ctx := context.Background()
+	key := PRKey{Provider: "github", RepoFullName: "o/r", PRNumber: 5}
+
+	// Jaccard between "goroutine leak in handler" and "goroutine leak on shutdown
+	// timeout" is ~0.40: above ResolvedSuppressThreshold (0.3) but below
+	// SimilarTitleThreshold (0.5). The existing code would NOT suppress this for
+	// any prior (resolved or not) because it uses the 0.5 threshold uniformly.
+	// After Task 3 it must suppress it for a resolved prior.
+	cases := []struct {
+		name             string
+		priorLine        int
+		priorBody        string
+		newLineStart     int
+		newLineEnd       int
+		newBody          string
+		expectSuppressed bool
+	}{
+		{
+			// Jaccard ~0.40 — above 0.3, below 0.5. Must be suppressed for resolved prior.
+			name:             "same anchor line + jaccard between thresholds → suppressed",
+			priorLine:        42,
+			priorBody:        "goroutine leak in handler",
+			newLineStart:     42,
+			newLineEnd:       42,
+			newBody:          "goroutine leak on shutdown timeout",
+			expectSuppressed: true,
+		},
+		{
+			// New comment line range overlaps prior anchor (line-overlap rule).
+			// Same Jaccard band — overlap should trigger suppression regardless.
+			name:             "line-range overlaps prior anchor → suppressed",
+			priorLine:        42,
+			priorBody:        "goroutine leak in handler",
+			newLineStart:     40,
+			newLineEnd:       44,
+			newBody:          "goroutine leak on shutdown timeout",
+			expectSuppressed: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := NewFromPrior(key, vcs.PriorReview{
+				Inline: []vcs.PriorInline{{
+					Tool:            "review",
+					File:            "a.go",
+					Severity:        "warn",
+					StructuralKey:   "sk-resolved-1",
+					NormalizedTitle: normalizeTitle(tc.priorBody),
+					Title:           firstLine(tc.priorBody),
+					ExternalID:      "thread-1",
+					Resolved:        true,
+					Line:            tc.priorLine,
+					EndLine:         tc.priorLine,
+				}},
+			})
+			c := vcs.InlineComment{
+				File:      "a.go",
+				Severity:  vcs.SeverityWarn,
+				Body:      tc.newBody,
+				LineStart: tc.newLineStart,
+				LineEnd:   tc.newLineEnd,
+			}
+			got, err := s.HasFinding(ctx, key, "review", c)
+			if err != nil {
+				t.Fatalf("HasFinding error: %v", err)
+			}
+			if got != tc.expectSuppressed {
+				t.Errorf("HasFinding = %v, want %v (case: %s)", got, tc.expectSuppressed, tc.name)
+			}
+		})
+	}
+}
+
+// TestMemoryStoreHasResolvedDoesNotSuppressDifferentLine verifies that a
+// resolved prior at line 10 does NOT suppress an unrelated new finding at line
+// 50 with low token overlap. The guardrail ensures only same-area rewording is
+// caught, not an unrelated issue at a completely different location.
+func TestMemoryStoreHasResolvedDoesNotSuppressDifferentLine(t *testing.T) {
+	ctx := context.Background()
+	key := PRKey{Provider: "github", RepoFullName: "o/r", PRNumber: 6}
+
+	s := NewFromPrior(key, vcs.PriorReview{
+		Inline: []vcs.PriorInline{{
+			Tool:            "review",
+			File:            "a.go",
+			Severity:        "warn",
+			StructuralKey:   "sk-resolved-2",
+			NormalizedTitle: normalizeTitle("Deferred rows.Close() silently discards errors"),
+			Title:           "Deferred rows.Close() silently discards errors",
+			ExternalID:      "thread-2",
+			Resolved:        true,
+			Line:            10,
+			EndLine:         10,
+		}},
+	})
+
+	// Completely different finding at a different line — low Jaccard, no line overlap.
+	c := vcs.InlineComment{
+		File:      "a.go",
+		Severity:  vcs.SeverityWarn,
+		Body:      "Missing context deadline on outbound HTTP request causes goroutine leak",
+		LineStart: 50,
+		LineEnd:   50,
+	}
+	got, err := s.HasFinding(ctx, key, "review", c)
+	if err != nil {
+		t.Fatalf("HasFinding error: %v", err)
+	}
+	if got {
+		t.Error("resolved prior at line 10 must NOT suppress unrelated finding at line 50")
+	}
+}
+
+// TestMemoryStoreHasResolvedJaccardBelowThreshold verifies that a resolved
+// prior does NOT suppress a genuinely different finding whose Jaccard score
+// falls below ResolvedSuppressThreshold (0.3), even when line numbers overlap.
+func TestMemoryStoreHasResolvedJaccardBelowThreshold(t *testing.T) {
+	ctx := context.Background()
+	key := PRKey{Provider: "github", RepoFullName: "o/r", PRNumber: 7}
+
+	s := NewFromPrior(key, vcs.PriorReview{
+		Inline: []vcs.PriorInline{{
+			Tool:            "review",
+			File:            "b.go",
+			Severity:        "warn",
+			StructuralKey:   "sk-resolved-3",
+			NormalizedTitle: normalizeTitle("Deferred rows.Close() silently discards errors"),
+			Title:           "Deferred rows.Close() silently discards errors",
+			ExternalID:      "thread-3",
+			Resolved:        true,
+			Line:            0, // no anchor line — Jaccard-only path
+			EndLine:         0,
+		}},
+	})
+
+	// Completely different finding: no token overlap with "rows.Close() silently discards errors".
+	c := vcs.InlineComment{
+		File:      "b.go",
+		Severity:  vcs.SeverityWarn,
+		Body:      "Unbounded goroutine pool risks memory exhaustion under heavy throughput",
+		LineStart: 30,
+		LineEnd:   30,
+	}
+	got, err := s.HasFinding(ctx, key, "review", c)
+	if err != nil {
+		t.Fatalf("HasFinding error: %v", err)
+	}
+	if got {
+		t.Error("resolved prior must NOT suppress a genuinely different finding below Jaccard threshold")
+	}
+}
