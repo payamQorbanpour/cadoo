@@ -150,6 +150,13 @@ type PriorInline struct {
 	NormalizedTitle string // full-body normalizeTitle result from marker nt= field; "" for legacy markers
 	ExternalID      string // discussion/thread id for ResolveThread; "" if unrecoverable
 	Resolved        bool   // already resolved upstream — don't re-resolve
+	// Line is the anchor line number for this finding (n.Position.NewLine for
+	// GitLab, reviewThread.line for GitHub). Zero means the adapter could not
+	// recover it (e.g. deleted-line thread or legacy marker with no position).
+	Line int
+	// EndLine is the end of the anchor range. Currently set equal to Line;
+	// reserved for future multi-line anchor support.
+	EndLine int
 }
 
 // Commit is a normalized VCS commit as used by the release-docs subsystem.

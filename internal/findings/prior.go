@@ -49,6 +49,8 @@ func NewFromPrior(key PRKey, pr vcs.PriorReview) *Store {
 			NormalizedTitle: nt,
 			Title:           pi.Title,
 			ExternalID:      pi.ExternalID,
+			Resolved:        pi.Resolved,
+			Line:            pi.Line,
 		})
 	}
 	if len(recs) > 0 {

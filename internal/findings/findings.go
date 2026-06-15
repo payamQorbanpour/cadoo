@@ -52,6 +52,13 @@ type PostedFinding struct {
 // per-tool tuning) can override.
 const SimilarTitleThreshold = 0.5
 
+// ResolvedSuppressThreshold is the Jaccard score above which a new finding is
+// suppressed when it overlaps with a user-resolved prior thread. Lower than
+// SimilarTitleThreshold so reworded restatements of resolved findings are
+// caught even when the LLM paraphrases substantially. Applies only in the
+// resolved-prior branch of memoryStore.has (CI-mode only; DB path unchanged).
+const ResolvedSuppressThreshold = 0.3
+
 // Store wraps the posted_findings + posted_summaries tables. A nil Store is
 // safe to call against; methods become no-ops returning zero values so the
 // dispatcher's hot path doesn't need nil-checks. When `pool` is nil and
@@ -508,6 +515,8 @@ type findingRec struct {
 	LineStart       int    `json:"ls"`
 	LineEnd         int    `json:"le"`
 	ExternalID      string `json:"eid,omitempty"`
+	Resolved        bool   `json:"resolved,omitempty"` // true when the upstream thread was resolved by the user
+	Line            int    `json:"line,omitempty"`     // anchor line from VCS (PriorInline.Line); 0 = unknown
 }
 
 type summaryRefKey struct {
