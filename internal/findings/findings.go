@@ -40,6 +40,11 @@ type PostedFinding struct {
 	Severity          string
 	Title             string
 	ExternalCommentID string
+	// StructuralKey is the pre-computed identity key for this finding (tool,
+	// file, severity, normalised body). Carried end-to-end so resolveStalePriors
+	// can compare it directly without re-deriving from p.Title (first-line only).
+	// Empty for legacy records written before this field was added.
+	StructuralKey string
 }
 
 // SimilarTitleThreshold is the Jaccard score above which two normalized
@@ -208,7 +213,8 @@ func (s *Store) ListPostedFindings(ctx context.Context, key PRKey) ([]PostedFind
 	}
 	const q = `SELECT tool, coalesce(file, ''), coalesce(line_start, 0),
 	                  coalesce(line_end, 0), coalesce(severity, ''),
-	                  coalesce(title, ''), coalesce(external_comment_id, '')
+	                  coalesce(title, ''), coalesce(external_comment_id, ''),
+	                  coalesce(structural_key, '')
 		FROM posted_findings
 		WHERE provider = $1 AND repo_full_name = $2 AND pr_number = $3
 		ORDER BY file, line_start, line_end`
@@ -221,7 +227,7 @@ func (s *Store) ListPostedFindings(ctx context.Context, key PRKey) ([]PostedFind
 	for rows.Next() {
 		var f PostedFinding
 		if err := rows.Scan(&f.Tool, &f.File, &f.LineStart, &f.LineEnd,
-			&f.Severity, &f.Title, &f.ExternalCommentID); err != nil {
+			&f.Severity, &f.Title, &f.ExternalCommentID, &f.StructuralKey); err != nil {
 			return nil, fmt.Errorf("scan posted finding: %w", err)
 		}
 		out = append(out, f)
@@ -596,6 +602,7 @@ func (m *memoryStore) list(key PRKey) []PostedFinding {
 			Severity:          r.Severity,
 			Title:             r.Title,
 			ExternalCommentID: r.ExternalID,
+			StructuralKey:     r.StructuralKey,
 		})
 	}
 	return out
