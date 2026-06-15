@@ -234,7 +234,7 @@ func TestPostInlineKeepsDistinctSuggestionsInBatch(t *testing.T) {
 	t.Run("cli path with nil Posted store", func(t *testing.T) {
 		fv := &fakeVCS{kind: vcs.KindGitLab, pr: pr}
 		d := &Dispatcher{VCSPool: map[vcs.Kind]vcs.Provider{vcs.KindGitLab: fv}}
-		d.postInline(ctx, fv, pr, key, "improve", []vcs.InlineComment{c1, c2})
+		d.postInline(ctx, fv, pr, key, "improve", []vcs.InlineComment{c1, c2}, nil, false)
 		if fv.inlineCnt != 2 {
 			t.Fatalf("expected 2 distinct suggestions posted, got %d", fv.inlineCnt)
 		}
@@ -246,7 +246,7 @@ func TestPostInlineKeepsDistinctSuggestionsInBatch(t *testing.T) {
 			VCSPool: map[vcs.Kind]vcs.Provider{vcs.KindGitLab: fv},
 			Posted:  findings.NewMemory(""),
 		}
-		d.postInline(ctx, fv, pr, key, "improve", []vcs.InlineComment{c1, c2})
+		d.postInline(ctx, fv, pr, key, "improve", []vcs.InlineComment{c1, c2}, nil, false)
 		if fv.inlineCnt != 2 {
 			t.Fatalf("expected 2 distinct suggestions posted, got %d", fv.inlineCnt)
 		}
@@ -267,7 +267,7 @@ func TestPostInlineCollapsesIdenticalDuplicatesInBatch(t *testing.T) {
 
 	fv := &fakeVCS{kind: vcs.KindGitLab, pr: pr}
 	d := &Dispatcher{VCSPool: map[vcs.Kind]vcs.Provider{vcs.KindGitLab: fv}}
-	d.postInline(ctx, fv, pr, key, "improve", []vcs.InlineComment{dup, dup})
+	d.postInline(ctx, fv, pr, key, "improve", []vcs.InlineComment{dup, dup}, nil, false)
 	if fv.inlineCnt != 1 {
 		t.Fatalf("expected 1 comment posted (intra-batch dedup of identical bodies), got %d", fv.inlineCnt)
 	}
@@ -291,7 +291,7 @@ func TestPostInlineResolvesStalePriors(t *testing.T) {
 		{File: "a.go", LineStart: 1, Severity: "warn", Body: "Stale finding A"},
 		{File: "b.go", LineStart: 2, Severity: "warn", Body: "Surviving finding B"},
 	}
-	d.postInline(ctx, fv, pr, key, "review", first)
+	d.postInline(ctx, fv, pr, key, "review", first, nil, false)
 
 	// Manually backfill IDs the way the real adapter would — fakeVCS
 	// returns empty IDs, so we re-record with synthetic IDs to simulate
@@ -304,7 +304,7 @@ func TestPostInlineResolvesStalePriors(t *testing.T) {
 	second := []vcs.InlineComment{
 		{File: "b.go", LineStart: 2, Severity: "warn", Body: "Surviving finding B"},
 	}
-	d.postInline(ctx, fv, pr, key, "review", second)
+	d.postInline(ctx, fv, pr, key, "review", second, nil, false)
 
 	if len(fv.resolved) != 1 {
 		t.Fatalf("expected exactly 1 resolved thread, got %d: %v", len(fv.resolved), fv.resolved)
@@ -338,7 +338,7 @@ func TestPostInlineStampsWireBodyButRecordsPristine(t *testing.T) {
 	key := findings.PRKey{Provider: "gitlab", RepoFullName: "g/p", PRNumber: 1}
 	c := vcs.InlineComment{File: "a.go", Body: "Fix the leak.", Severity: vcs.SeverityWarn}
 
-	d.postInline(ctx, cv, pr, key, "review", []vcs.InlineComment{c})
+	d.postInline(ctx, cv, pr, key, "review", []vcs.InlineComment{c}, nil, false)
 
 	if len(cv.sentBodies) != 1 {
 		t.Fatalf("sent %d bodies; want 1", len(cv.sentBodies))
@@ -439,7 +439,7 @@ func TestCIModeTwoRunIdempotency(t *testing.T) {
 	// --- Run 1: fresh PR, empty prior store (legacy CI behaviour seed). ---
 	d1 := &Dispatcher{Posted: findings.NewFromPrior(key, vcs.PriorReview{})}
 	d1.postSummary(ctx, sv, pr, key, "review", "## Overview\nfirst pass")
-	d1.postInline(ctx, sv, pr, key, "review", []vcs.InlineComment{c1, c2})
+	d1.postInline(ctx, sv, pr, key, "review", []vcs.InlineComment{c1, c2}, nil, false)
 
 	if len(sv.inline) != 2 || sv.summaryID != "S1" {
 		t.Fatalf("run1: inline=%d summaryID=%q; want 2, S1", len(sv.inline), sv.summaryID)
@@ -452,7 +452,7 @@ func TestCIModeTwoRunIdempotency(t *testing.T) {
 
 	d2 := &Dispatcher{Posted: findings.NewFromPrior(key, prior)}
 	d2.postSummary(ctx, sv, pr, key, "review", "## Overview\nsecond pass")
-	d2.postInline(ctx, sv, pr, key, "review", []vcs.InlineComment{c1, c3})
+	d2.postInline(ctx, sv, pr, key, "review", []vcs.InlineComment{c1, c3}, nil, false)
 
 	if len(sv.inline) != 1 || sv.inline[0].File != "c.go" {
 		t.Errorf("run2 inline = %+v; want only c.go (c1 deduped)", sv.inline)
@@ -508,7 +508,7 @@ func TestResolveStalePriorsMultiLineNotSelfResolved(t *testing.T) {
 
 	// Run postInline with the SAME comment — it is still present in the
 	// current run. resolveStalePriors must NOT resolve the thread.
-	d.postInline(ctx, fv, pr, key, "improve", []vcs.InlineComment{comment})
+	d.postInline(ctx, fv, pr, key, "improve", []vcs.InlineComment{comment}, nil, false)
 
 	if len(fv.resolved) != 0 {
 		t.Errorf("multi-line still-present thread was self-resolved: %v", fv.resolved)
@@ -535,7 +535,7 @@ func TestCIModeSuppressesRephrasedImproveOnPush2(t *testing.T) {
 	c1 := vcs.InlineComment{File: "a.go", Body: body1, Severity: vcs.SeverityNit}
 
 	d1 := &Dispatcher{Posted: findings.NewFromPrior(key, vcs.PriorReview{})}
-	d1.postInline(ctx, sv, pr, key, "improve", []vcs.InlineComment{c1})
+	d1.postInline(ctx, sv, pr, key, "improve", []vcs.InlineComment{c1}, nil, false)
 	if len(sv.inline) != 1 {
 		t.Fatalf("push1: expected 1 inline, got %d", len(sv.inline))
 	}
@@ -549,7 +549,7 @@ func TestCIModeSuppressesRephrasedImproveOnPush2(t *testing.T) {
 	c2 := vcs.InlineComment{File: "a.go", Body: body2, Severity: vcs.SeverityNit}
 
 	d2 := &Dispatcher{Posted: findings.NewFromPrior(key, prior)}
-	d2.postInline(ctx, sv, pr, key, "improve", []vcs.InlineComment{c2})
+	d2.postInline(ctx, sv, pr, key, "improve", []vcs.InlineComment{c2}, nil, false)
 
 	if len(sv.inline) != 0 {
 		t.Errorf("push2: rephrased improve suggestion was not deduped; got %d new posts (expected 0)", len(sv.inline))

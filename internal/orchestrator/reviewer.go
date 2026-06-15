@@ -276,12 +276,56 @@ func (d *Dispatcher) Run(ctx context.Context, job ToolJob) (retErr error) {
 		}
 	}
 
+	// Incremental dispatch block (Part C, T-08-C4 / T-08-C5): when the
+	// Posted store holds a LastReviewedSHA and the provider implements
+	// DiffBetweener, narrow the inline review to the delta.
+	//
+	// Guard: sha must be non-empty AND not the current head — equal SHA
+	// is the fixed-point fast-path that skips the provider call entirely
+	// and produces an empty incremental set (T-08-C4).
+	var inChangeSet map[string]struct{}
+	isIncrementalRun := false
+	if sha := d.Posted.LastReviewedSHA(); sha != "" && sha != pr.HeadSHA {
+		if db, ok := provider.(vcs.DiffBetweener); ok {
+			incr, err := db.DiffBetween(ctx, pr.RepoFullName, sha, pr.HeadSHA)
+			switch {
+			case err != nil || incr == nil:
+				// Non-ancestor SHA, force-push, or provider error → full-review
+				// fallback: leave Files/Packed full, IsIncrementalRun=false (T-08-C5).
+			case len(incr) == 0:
+				// Empty diff: unchanged head. Inline tools have nothing to review;
+				// resolveStalePriors sees an empty changeSet and resolves nothing.
+				in.IsIncrementalRun = true
+				isIncrementalRun = true
+				inChangeSet = map[string]struct{}{}
+			default:
+				// Non-empty incremental diff: populate incremental context fields.
+				in.IncrementalFiles = incr
+				in.IncrementalPacked = contextengine.Compress(incr, contextengine.CompressOptions{
+					MaxTokens:    d.maxTokens(),
+					PerFileMax:   d.perFileTokens(),
+					IncludePaths: cfg.Review.IncludePaths,
+					ExcludePaths: cfg.Review.ExcludePaths,
+				})
+				in.IsIncrementalRun = true
+				isIncrementalRun = true
+				inChangeSet = fileSet(incr)
+			}
+		}
+	} else if sha := d.Posted.LastReviewedSHA(); sha != "" && sha == pr.HeadSHA {
+		// Same-commit fast-path: sha == head → empty incremental set without
+		// calling DiffBetween (T-08-C4 DoS guard).
+		in.IsIncrementalRun = true
+		isIncrementalRun = true
+		inChangeSet = map[string]struct{}{}
+	}
+
 	res, err := tool.Run(ctx, in)
 	if err != nil {
 		d.failCheck(ctx, provider, pr, err)
 		return fmt.Errorf("run tool %q: %w", job.Tool, err)
 	}
-	if err := d.applyResult(ctx, provider, pr, job.Tool, res); err != nil {
+	if err := d.applyResult(ctx, provider, pr, job.Tool, res, inChangeSet, isIncrementalRun); err != nil {
 		return err
 	}
 	if d.Notifier != nil {
@@ -299,7 +343,7 @@ func (d *Dispatcher) Run(ctx context.Context, job ToolJob) (retErr error) {
 // section inside one consolidated PR comment (instead of one comment per
 // tool), and inline comments whose fingerprints have already been posted
 // are skipped. Passing tool == "" disables idempotency for this call.
-func (d *Dispatcher) applyResult(ctx context.Context, provider vcs.Provider, pr *vcs.PullRequest, tool string, res *tools.Result) error {
+func (d *Dispatcher) applyResult(ctx context.Context, provider vcs.Provider, pr *vcs.PullRequest, tool string, res *tools.Result, changeSet map[string]struct{}, incrementalRun bool) error {
 	if res == nil {
 		return nil
 	}
@@ -312,7 +356,7 @@ func (d *Dispatcher) applyResult(ctx context.Context, provider vcs.Provider, pr 
 		d.postSummary(ctx, provider, pr, key, tool, res.Summary)
 	}
 	if len(res.InlineComments) > 0 {
-		d.postInline(ctx, provider, pr, key, tool, res.InlineComments)
+		d.postInline(ctx, provider, pr, key, tool, res.InlineComments, changeSet, incrementalRun)
 	}
 	if d.ReportStatus {
 		if res.CheckRun != nil {
@@ -392,7 +436,7 @@ func (d *Dispatcher) applyPRBody(ctx context.Context, provider vcs.Provider, pr 
 	return provider.EditPullRequestBody(ctx, pr, newBody)
 }
 
-func (d *Dispatcher) postInline(ctx context.Context, provider vcs.Provider, pr *vcs.PullRequest, key findings.PRKey, tool string, comments []vcs.InlineComment) {
+func (d *Dispatcher) postInline(ctx context.Context, provider vcs.Provider, pr *vcs.PullRequest, key findings.PRKey, tool string, comments []vcs.InlineComment, changeSet map[string]struct{}, incrementalRun bool) {
 	// Snapshot prior findings before we filter — we need them to compute
 	// which threads went stale on this run.
 	var prior []findings.PostedFinding
@@ -464,7 +508,7 @@ func (d *Dispatcher) postInline(ctx context.Context, provider vcs.Provider, pr *
 	// run. Only acts on this tool's own priors so /describe doesn't
 	// resolve /review threads (or vice versa). Skips priors with no
 	// external ID — we have nothing to resolve against.
-	d.resolveStalePriors(ctx, provider, pr, tool, prior, comments)
+	d.resolveStalePriors(ctx, provider, pr, tool, prior, comments, changeSet, incrementalRun)
 }
 
 // resolveStalePriors walks prior findings for the given tool, computes
@@ -472,7 +516,11 @@ func (d *Dispatcher) postInline(ctx context.Context, provider vcs.Provider, pr *
 // key, which is line-agnostic), and asks the provider to resolve the
 // thread for any prior that's gone missing. Best-effort: errors are logged
 // and the loop continues so one flaky resolve doesn't stop the rest.
-func (d *Dispatcher) resolveStalePriors(ctx context.Context, provider vcs.Provider, pr *vcs.PullRequest, tool string, prior []findings.PostedFinding, current []vcs.InlineComment) {
+//
+// When incrementalRun is true and changeSet is non-empty, only priors whose
+// anchor File is in the change set are eligible for resolution — priors on
+// untouched files persist as open threads (SPEC critical interaction, T-08-C6).
+func (d *Dispatcher) resolveStalePriors(ctx context.Context, provider vcs.Provider, pr *vcs.PullRequest, tool string, prior []findings.PostedFinding, current []vcs.InlineComment, changeSet map[string]struct{}, incrementalRun bool) {
 	if tool == "" || len(prior) == 0 {
 		return
 	}
@@ -483,6 +531,15 @@ func (d *Dispatcher) resolveStalePriors(ctx context.Context, provider vcs.Provid
 	for _, p := range prior {
 		if p.Tool != tool || p.ExternalCommentID == "" {
 			continue
+		}
+		// Incremental change-set gate: when running in incremental mode, skip
+		// priors on files that were NOT changed since the last reviewed SHA.
+		// This preserves threads on untouched code instead of resolving them
+		// just because the inline tool received a narrower file set (T-08-C6).
+		if incrementalRun && len(changeSet) > 0 {
+			if _, changed := changeSet[p.File]; !changed {
+				continue
+			}
 		}
 		// Compare the carried StructuralKey directly when available.
 		// Legacy records (written before StructuralKey was threaded into
@@ -635,6 +692,17 @@ func (d *Dispatcher) runLinters(ctx context.Context, provider vcs.Provider, pr *
 	}
 	wg.Wait()
 	return all
+}
+
+// fileSet builds a map of file paths for O(1) membership tests. Used to
+// determine which files are in the incremental change set so resolveStalePriors
+// can skip priors on untouched files.
+func fileSet(files []vcs.FileChange) map[string]struct{} {
+	out := make(map[string]struct{}, len(files))
+	for _, f := range files {
+		out[f.Path] = struct{}{}
+	}
+	return out
 }
 
 func configuredKinds(pool map[vcs.Kind]vcs.Provider) []vcs.Kind {
