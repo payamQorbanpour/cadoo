@@ -278,3 +278,23 @@ type BranchCommitter interface {
 	// otherwise a new PR is created from branch → base. Returns the PR number.
 	OpenOrUpdatePR(ctx context.Context, repo, branch, base, title, body string) (int64, error)
 }
+
+// DiffBetweener is an OPTIONAL capability. Adapters that can return the
+// file-level diff between two commits implement this interface so the
+// orchestrator can fetch only the incremental diff since the last review.
+// The orchestrator type-asserts for it; providers that don't implement it
+// fall back to a full review with no error.
+//
+// Contract for the return value:
+//   - ([]FileChange, nil)  — diff computed; empty slice means no changed files
+//     (caller should skip inline tools for this incremental run)
+//   - (nil, nil)           — oldSHA is not reachable from newSHA (e.g. after a
+//     force-push or the SHA was forged); caller falls back to full review
+//   - (nil, err)           — unexpected API failure; caller falls back to full review
+type DiffBetweener interface {
+	// DiffBetween returns the file changes between oldSHA and newSHA within
+	// the named repository. Returns (nil, nil) when oldSHA is not an ancestor
+	// of newSHA (non-ancestor / force-push / forged SHA), signalling a
+	// full-review fallback to the caller.
+	DiffBetween(ctx context.Context, repo, oldSHA, newSHA string) ([]FileChange, error)
+}

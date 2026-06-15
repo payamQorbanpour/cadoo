@@ -288,6 +288,7 @@ func (a *Adapter) ListCadooArtifacts(ctx context.Context, pr *vcs.PullRequest) (
 				}
 				if n.Position == nil && strings.Contains(n.Body, vcs.SummaryWrapperBegin) {
 					out.SummaryCommentID = strconv.FormatInt(n.ID, 10)
+					out.LastReviewedSHA = vcs.ParseReviewedSHA(n.Body)
 				}
 			}
 		}
