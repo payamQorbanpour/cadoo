@@ -13,9 +13,9 @@ func TestRawContentURL(t *testing.T) {
 		want string
 	}{
 		{
-			name: "github.com",
+			name: "github.com ignores baseURL",
 			kind: KindGitHub,
-			base: "https://github.com",
+			base: "https://wrong.example.com", // must be ignored for KindGitHub
 			repo: "owner/repo",
 			ref:  "main",
 			path: "docs/assets/AI.png",
@@ -29,6 +29,24 @@ func TestRawContentURL(t *testing.T) {
 			ref:  "main",
 			path: "docs/assets/AI.png",
 			want: "https://ghe.example.com/owner/repo/raw/main/docs/assets/AI.png",
+		},
+		{
+			name: "ghes trailing slash tolerated",
+			kind: KindGitHubEnterprise,
+			base: "https://ghe.example.com/",
+			repo: "owner/repo",
+			ref:  "main",
+			path: "docs/assets/AI.png",
+			want: "https://ghe.example.com/owner/repo/raw/main/docs/assets/AI.png",
+		},
+		{
+			name: "gitlab trailing slash tolerated",
+			kind: KindGitLab,
+			base: "https://gitlab.example.com/",
+			repo: "group/project",
+			ref:  "main",
+			path: "docs/assets/AI.png",
+			want: "https://gitlab.example.com/group/project/-/raw/main/docs/assets/AI.png",
 		},
 		{
 			name: "gitlab.com",
