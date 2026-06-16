@@ -15,8 +15,7 @@ func TestBuildAIPromptBlockContainsRequiredParts(t *testing.T) {
 		Severity:  vcs.SeverityWarn,
 		Body:      "**Missing capability check**\n\nThe handler lacks an admin scope guard.",
 	}
-	iconURL := "https://raw.githubusercontent.com/org/repo/main/docs/assets/AI.png"
-	block := buildAIPromptBlock(c, iconURL)
+	block := buildAIPromptBlock(c, cadooAIIconURL)
 
 	must := []struct {
 		label string
@@ -24,7 +23,7 @@ func TestBuildAIPromptBlockContainsRequiredParts(t *testing.T) {
 	}{
 		{"opening details tag", "<details>"},
 		{"opening summary tag", "<summary>"},
-		{"img tag with src", `<img src="` + iconURL + `"`},
+		{"img tag with src", `<img src="` + cadooAIIconURL + `"`},
 		{"prompt label", "Prompt for AI Agents"},
 		{"closing summary tag", "</summary>"},
 		{"file path in backticks", "`internal/auth/middleware.go`"},
@@ -69,5 +68,57 @@ func TestBuildAIPromptBlockEmptyIconOmitsImgTag(t *testing.T) {
 	}
 	if !strings.Contains(block, "Prompt for AI Agents") {
 		t.Error("summary label 'Prompt for AI Agents' must still be present without icon")
+	}
+}
+
+func TestBuildAIPromptBlockZeroLineStartOmitsLineRef(t *testing.T) {
+	c := vcs.InlineComment{File: "x.go", LineStart: 0, LineEnd: 0, Severity: vcs.SeverityWarn, Body: "file-level issue"}
+	block := buildAIPromptBlock(c, "")
+	if strings.Contains(block, "line 0") {
+		t.Errorf("unanchored comment must not emit 'line 0', got:\n%s", block)
+	}
+	if strings.Contains(block, "lines 0") {
+		t.Errorf("unanchored comment must not emit 'lines 0', got:\n%s", block)
+	}
+}
+
+func TestBuildAIPromptBlockEscapesTripleBacktick(t *testing.T) {
+	c := vcs.InlineComment{
+		File:      "main.go",
+		LineStart: 5,
+		LineEnd:   7,
+		Severity:  vcs.SeverityBlock,
+		Body:      "Use\n```go\nfoo()\n```\ninstead.",
+	}
+	block := buildAIPromptBlock(c, "")
+	// The outer fence is the first and last ``` in the block after the newline
+	// following </summary>. Triple-backtick sequences inside c.Body must be
+	// escaped so the outer fence is not closed prematurely.
+	_, inner, ok := strings.Cut(block, "```\n")
+	if !ok {
+		t.Fatal("expected at least one opening code fence in block")
+	}
+	innerContent, afterClose, ok := strings.Cut(inner, "\n```")
+	if !ok {
+		t.Fatal("expected closing code fence in block")
+	}
+	if !strings.Contains(afterClose, "</details>") {
+		t.Errorf("closing </details> not found after the code fence close, got:\n%s", block)
+	}
+	// The raw ``` from the body must not appear unescaped inside the fenced block
+	if strings.Contains(innerContent, "```go") {
+		t.Errorf("unescaped ```go in prompt body would break the fenced block:\n%s", block)
+	}
+}
+
+func TestCadooAIIconURLPointsToCadooRepo(t *testing.T) {
+	// The icon must point to the Cadoo repo itself, not to the reviewed repo.
+	// This is a regression guard: using pr.RepoFullName would point to the
+	// customer repo (which almost certainly lacks docs/assets/AI.png).
+	if !strings.Contains(cadooAIIconURL, "payamqorbanpour/cadoo") {
+		t.Errorf("cadooAIIconURL must point to the Cadoo repo, got: %s", cadooAIIconURL)
+	}
+	if !strings.HasPrefix(cadooAIIconURL, "https://") {
+		t.Errorf("cadooAIIconURL must be an absolute HTTPS URL, got: %s", cadooAIIconURL)
 	}
 }
