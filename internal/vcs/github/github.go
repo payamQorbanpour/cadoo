@@ -93,6 +93,18 @@ func (a *Adapter) Kind() vcs.Kind {
 	return vcs.KindGitHubEnterprise
 }
 
+// BaseURL returns the scheme+host of this GitHub instance with no trailing
+// slash. For GitHub.com it returns "https://github.com". For GHES,
+// cfg.BaseURL is stored as the API endpoint (e.g.
+// "https://ghe.example.com/api/v3"); this method strips the "/api/v3"
+// suffix so callers receive the raw-content host.
+func (a *Adapter) BaseURL() string {
+	if a.cfg.BaseURL == "" {
+		return "https://github.com"
+	}
+	return strings.TrimSuffix(strings.TrimRight(a.cfg.BaseURL, "/"), "/api/v3")
+}
+
 // FetchPullRequest implements vcs.Provider.
 func (a *Adapter) FetchPullRequest(ctx context.Context, repo string, number int64) (*vcs.PullRequest, error) {
 	owner, name, err := splitRepo(repo)
