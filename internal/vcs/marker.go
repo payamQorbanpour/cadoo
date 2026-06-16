@@ -64,7 +64,7 @@ type MarkerData struct {
 }
 
 var inlineMarkerRe = regexp.MustCompile(
-	`\n*<!-- cadoo:fp v=1 tool=(\S+) sk=(\S+) sev=(\S*)(?:\s+nt=(\S+))? -->\s*$`)
+	`\n*<!-- cadoo:fp v=1 tool=(\S+) sk=(\S+) sev=(\S*)(?:\s+nt=(\S+))? -->`)
 
 // InlineMarker renders the hidden marker line. It is appended only to the
 // wire copy of a comment body — never to the body used for key computation.
