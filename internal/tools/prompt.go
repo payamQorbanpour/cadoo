@@ -38,7 +38,7 @@ func BuildDiffPrompt(in Input, opts PromptOptions) string {
 		}
 		fmt.Fprintf(&b, "## Description\n\n%s\n\n", body)
 	}
-	if brief := strings.TrimSpace(in.Config.Markdown); brief != "" {
+	if brief := in.Config.Markdown; brief != "" {
 		b.WriteString("## Project review guide (from .cadoo.md — treat as authoritative)\n\n")
 		b.WriteString(truncateText(brief, maxMarkdownBriefRunes))
 		b.WriteString("\n\n")

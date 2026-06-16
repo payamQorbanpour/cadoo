@@ -188,7 +188,7 @@ Run `make help` to see every target.
 
 ## Configuration
 
-Per-repo behaviour is controlled by two optional files at the repo root, both loaded from the PR/MR head SHA on each event (never from `main`):
+Per-repo behaviour is controlled by two optional files at the repo root. In webhook/server mode both are loaded from the PR/MR head SHA on each event (never from `main`); in CI mode (`cadoo ci`) they are read from the checked-out working tree:
 
 - **`.cadoo.yaml`** — the *structured* half: knobs, globs, and gates the engine branches on (strictness, path filters, comment policy, release-docs).
 - **`.cadoo.md`** — the *free-form* half: a plain natural-language review brief written for the model (team conventions, tone, domain context, area-specific scrutiny). Use it instead of cramming long prose into YAML multiline strings.
@@ -216,7 +216,7 @@ comment_policy:
   min_findings_to_post: 1
 ```
 
-The companion `.cadoo.md` is plain Markdown — Cadoo injects it into every review as authoritative context, **additive** to the YAML's `conventions` / `style_guides` / `path_instructions` (both apply, so avoid stating contradictory rules across the two files). It's capped at ~16K characters.
+The companion `.cadoo.md` is plain Markdown — Cadoo injects it into every review as authoritative context, **additive** to the YAML's `conventions` / `style_guides` / `path_instructions` (both apply, so avoid stating contradictory rules across the two files). It's capped at 16,000 runes (Unicode code points).
 
 ```markdown
 <!-- .cadoo.md -->

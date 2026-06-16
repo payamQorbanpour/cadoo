@@ -8,8 +8,10 @@ release-docs). Use this file for prose: what your team cares about, tone,
 domain context, and area-specific guidance that reads better as Markdown than
 as YAML multiline strings.
 
-Loaded from the PR head SHA (same rule as .cadoo.yaml), capped at ~16K chars,
-and injected into every review as authoritative context. It is ADDITIVE to the
+In webhook/server mode, loaded from the PR head SHA (same rule as .cadoo.yaml);
+in CI mode (cadoo ci), read from the checked-out working tree. Capped at 16,000
+runes (Unicode code points) and injected into every review as authoritative
+context. It is ADDITIVE to the
 YAML `conventions:` / `style_guides:` / `path_instructions:` — both apply, so
 avoid stating contradictory rules across the two files.
 

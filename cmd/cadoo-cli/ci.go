@@ -172,10 +172,12 @@ func ciCmd(args []string) {
 		os.Exit(1)
 	}
 	// Optional sibling free-form review brief (.cadoo.md), next to the YAML.
+	// Missing or unreadable is non-fatal — the brief is additive.
 	mdPath := filepath.Join(filepath.Dir(cfgFile), config.MarkdownFilename)
-	if repoCfg.Markdown, err = config.LoadMarkdown(mdPath); err != nil {
-		fmt.Fprintf(os.Stderr, "ci: load %s: %v\n", mdPath, err)
-		os.Exit(1)
+	if md, mdErr := config.LoadMarkdown(mdPath); mdErr != nil {
+		slog.Warn("ci: load .cadoo.md failed; continuing without review brief", "path", mdPath, "err", mdErr)
+	} else {
+		repoCfg.Markdown = md
 	}
 
 	// Stateless dispatcher: no DB, no audit, no KB.
