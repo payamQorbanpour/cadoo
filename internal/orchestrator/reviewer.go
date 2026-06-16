@@ -482,7 +482,7 @@ func (d *Dispatcher) postInline(ctx context.Context, provider vcs.Provider, pr *
 		for i, c := range delta {
 			wc := c
 			if tool != "" {
-				wc.Body = findings.StampInline(tool, c)
+				wc.Body = findings.StampInline(tool, c) + "\n\n" + buildAIPromptBlock(c, cadooAIIconURL)
 			}
 			wire[i] = wc
 		}
