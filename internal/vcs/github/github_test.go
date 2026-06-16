@@ -119,3 +119,24 @@ func TestGitHubListCadooArtifactsPaginationNoDuplicate(t *testing.T) {
 		t.Errorf("server calls = %d; want >=2 (comments paginated)", call)
 	}
 }
+
+func TestAdapterBaseURL(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  Config
+		want string
+	}{
+		{"github.com", Config{}, "https://github.com"},
+		{"ghes canonical", Config{BaseURL: "https://ghe.example.com/api/v3"}, "https://ghe.example.com"},
+		{"ghes trailing slash", Config{BaseURL: "https://ghe.example.com/api/v3/"}, "https://ghe.example.com"},
+		{"ghes uppercase path", Config{BaseURL: "https://ghe.example.com/API/V3"}, "https://ghe.example.com"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &Adapter{cfg: tc.cfg}
+			if got := a.BaseURL(); got != tc.want {
+				t.Errorf("BaseURL() = %q; want %q", got, tc.want)
+			}
+		})
+	}
+}

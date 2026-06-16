@@ -18,7 +18,7 @@ Cadoo posts inline review comments, generates PR descriptions, suggests improvem
 - **Multi-provider LLM** — talks to any [LiteLLM](https://github.com/BerriAI/litellm)-compatible endpoint, so you can route per-tenant to OpenAI, Anthropic, Bedrock, Azure, local Ollama, etc.
 - **Idempotent comments** — fingerprinted findings so resyncs update existing threads instead of spamming new ones.
 - **File Walkthrough** — `/describe` buckets every changed file into 7 fixed categories (Enhancement, Bug fix, Tests, Documentation, Configuration changes, Formatting, Additional files) with per-file summaries and `+adds/-dels` counts, rendered as a collapsible table inline in the PR description.
-- **Per-repo config** — `.cadoo.yaml` loaded from the PR head; controls which tools auto-run on which events and paths.
+- **Per-repo config** — `.cadoo.yaml` (structured knobs) plus an optional `.cadoo.md` (free-form natural-language review brief), both loaded from the PR head; controls which tools auto-run on which events/paths and how reviews are steered.
 - **Sandboxed static analysis** — runs 10–15 linters inside isolated containers, results fused into the model's context.
 - **Knowledge base + learnings** — pgvector-backed; `/learn` and `/unlearn` teach Cadoo team-specific rules that persist across reviews.
 - **Release Docs** — generates changelog, release notes, blog posts, and an API reference (OpenAPI → offline Redoc HTML + Markdown) on tag/release events, published to the release body, a changelog PR, and a docs branch.
@@ -146,7 +146,7 @@ internal/analysis        Sandboxed static-analysis runners
 internal/audit           Tamper-resistant audit log
 internal/auth            OIDC + SAML + RBAC
 internal/billing         Seat tracking + usage metering
-internal/config          Config loader (.cadoo.yaml + env)
+internal/config          Config loader (.cadoo.yaml + .cadoo.md + env)
 internal/contextengine   Diff fetch + PR-compression + repo index
 internal/db              pgx pool + sqlc-generated queries
 internal/findings        Fingerprinting for idempotent comments
@@ -188,7 +188,12 @@ Run `make help` to see every target.
 
 ## Configuration
 
-Per-repo behaviour is controlled by a `.cadoo.yaml` file at the repo root, loaded from the PR head SHA on each event.
+Per-repo behaviour is controlled by two optional files at the repo root. In webhook/server mode both are loaded from the PR/MR head SHA on each event (never from `main`); in CI mode (`cadoo ci`) they are read from the checked-out working tree:
+
+- **`.cadoo.yaml`** — the *structured* half: knobs, globs, and gates the engine branches on (strictness, path filters, comment policy, release-docs).
+- **`.cadoo.md`** — the *free-form* half: a plain natural-language review brief written for the model (team conventions, tone, domain context, area-specific scrutiny). Use it instead of cramming long prose into YAML multiline strings.
+
+Both are optional; with neither present, sensible defaults apply.
 
 ```yaml
 # .cadoo.yaml
@@ -210,6 +215,24 @@ comment_policy:
   skip_if_only_nits: true         # drop the post when every finding is a nit
   min_findings_to_post: 1
 ```
+
+The companion `.cadoo.md` is plain Markdown — Cadoo injects it into every review as authoritative context, **additive** to the YAML's `conventions` / `style_guides` / `path_instructions` (both apply, so avoid stating contradictory rules across the two files). It's capped at 16,000 runes (Unicode code points).
+
+```markdown
+<!-- .cadoo.md -->
+# Review guide
+
+We optimize for correctness and clarity over cleverness.
+
+## Areas with extra scrutiny
+- `internal/auth/**` — assume an attacker is reading this code; flag missing capability checks.
+- `db/migrations/**` — forward-only; call out any DROP COLUMN.
+
+## Tone
+Be direct and specific. Quote the exact line and suggest a concrete fix.
+```
+
+Both files work identically across GitHub, GitHub Enterprise, and GitLab — in server/webhook mode (read from the head SHA via the VCS API) and in **CI-mode** (`cadoo ci --pr` / `--mr`, read from the checked-out working tree). For GitLab CI specifically, just commit `.cadoo.md` to the repo root; the bundled `deploy/gitlab/.gitlab-ci.cadoo.yml` runner needs no changes. See [`.cadoo.yaml.example`](.cadoo.yaml.example) and [`.cadoo.md.example`](.cadoo.md.example) for the full set of keys.
 
 Tenant-wide config (LLM endpoints, VCS credentials, SSO) lives in `internal/settings` and is managed via the API / dashboard.
 

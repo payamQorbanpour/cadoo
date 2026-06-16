@@ -38,16 +38,14 @@ func RenderReviewedSHA(sha string) string {
 // validation prevents a forged PR comment from directing DiffBetween at an
 // arbitrary object (ASVS V5 / T-08-C1).
 func ParseReviewedSHA(body string) string {
-	idx := strings.Index(body, reviewedSHAPrefix)
-	if idx < 0 {
+	_, rest, ok := strings.Cut(body, reviewedSHAPrefix)
+	if !ok {
 		return ""
 	}
-	rest := body[idx+len(reviewedSHAPrefix):]
-	end := strings.Index(rest, reviewedSHASuffix)
-	if end < 0 {
+	candidate, _, ok := strings.Cut(rest, reviewedSHASuffix)
+	if !ok {
 		return ""
 	}
-	candidate := rest[:end]
 	if !reviewedSHARe.MatchString(candidate) {
 		return ""
 	}
@@ -64,7 +62,7 @@ type MarkerData struct {
 }
 
 var inlineMarkerRe = regexp.MustCompile(
-	`\n*<!-- cadoo:fp v=1 tool=(\S+) sk=(\S+) sev=(\S*)(?:\s+nt=(\S+))? -->\s*$`)
+	`\n+<!-- cadoo:fp v=1 tool=(\S+) sk=(\S+) sev=(\S*)(?:\s+nt=(\S+))? -->`)
 
 // InlineMarker renders the hidden marker line. It is appended only to the
 // wire copy of a comment body — never to the body used for key computation.
@@ -79,9 +77,10 @@ func InlineMarker(d MarkerData) string {
 }
 
 // ParseInlineMarker extracts the marker from a comment body. It returns the
-// parsed payload, the body with the marker (and its leading blank line)
-// removed, and whether a marker was present. The NT field is decoded from
-// base64url if present; legacy markers (without nt=) leave NT empty.
+// parsed payload, the body with the marker (and any content after it, such
+// as appended AI-prompt blocks) removed, and whether a marker was present.
+// The NT field is decoded from base64url if present; legacy markers
+// (without nt=) leave NT empty.
 func ParseInlineMarker(body string) (MarkerData, string, bool) {
 	loc := inlineMarkerRe.FindStringSubmatchIndex(body)
 	if loc == nil {

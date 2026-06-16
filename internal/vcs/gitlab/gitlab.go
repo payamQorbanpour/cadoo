@@ -44,6 +44,16 @@ func New(cfg Config) (*Adapter, error) {
 // Kind reports gitlab.com / self-managed (both map to KindGitLab).
 func (a *Adapter) Kind() vcs.Kind { return vcs.KindGitLab }
 
+// BaseURL returns the scheme+host of this GitLab instance with no trailing
+// slash. For GitLab.com it returns "https://gitlab.com"; for self-managed
+// instances it strips any trailing slash from cfg.BaseURL.
+func (a *Adapter) BaseURL() string {
+	if a.cfg.BaseURL == "" {
+		return "https://gitlab.com"
+	}
+	return strings.TrimRight(a.cfg.BaseURL, "/")
+}
+
 // FetchPullRequest implements vcs.Provider. The PR number is the MR IID.
 func (a *Adapter) FetchPullRequest(ctx context.Context, repo string, number int64) (*vcs.PullRequest, error) {
 	mr, _, err := a.client.MergeRequests.GetMergeRequest(repo, number,

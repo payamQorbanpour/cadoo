@@ -482,7 +482,7 @@ func (d *Dispatcher) postInline(ctx context.Context, provider vcs.Provider, pr *
 		for i, c := range delta {
 			wc := c
 			if tool != "" {
-				wc.Body = findings.StampInline(tool, c)
+				wc.Body = findings.StampInline(tool, c) + "\n\n" + buildAIPromptBlock(c, cadooAIIconURL)
 			}
 			wire[i] = wc
 		}
@@ -583,6 +583,13 @@ func (d *Dispatcher) loadCfg(ctx context.Context, provider vcs.Provider, pr *vcs
 	if err != nil {
 		slog.Warn("parse .cadoo.yaml; using base config", "err", err)
 		return d.BaseCfg
+	}
+	// Load the optional sibling .cadoo.md free-form review brief from the same
+	// head SHA. Missing or unreadable is non-fatal — the brief is additive.
+	if mdRaw, mdErr := ff.FetchFileFromRef(ctx, pr.RepoFullName, pr.HeadSHA, config.MarkdownFilename); mdErr == nil {
+		cfg.Markdown = strings.TrimSpace(string(mdRaw))
+	} else if !isMissingFile(mdErr) {
+		slog.Debug("load .cadoo.md failed; continuing without brief", "err", mdErr)
 	}
 	return cfg
 }

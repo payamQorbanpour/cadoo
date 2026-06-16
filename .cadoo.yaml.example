@@ -1,5 +1,10 @@
 # Example .cadoo.yaml — drop into the root of any repo Cadoo reviews.
 # This file is the per-repo override; org-level defaults live in the dashboard.
+#
+# This is the STRUCTURED half of Cadoo's config (knobs, globs, gates). For
+# free-form natural-language review guidance, add a sibling .cadoo.md (see
+# .cadoo.md.example) — it is loaded from the same PR head SHA and is additive
+# to the conventions / style_guides / path_instructions keys below.
 
 # Which model to use for reviews. Routes through the LLM gateway,
 # which can resolve to Anthropic, OpenAI, Gemini, DeepSeek, Ollama, etc.

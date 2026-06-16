@@ -68,6 +68,49 @@ func TestParseInlineMarkerAbsent(t *testing.T) {
 	}
 }
 
+func TestParseInlineMarkerWithTrailingContent(t *testing.T) {
+	body := "Fix the leak."
+	marker := InlineMarker(MarkerData{Tool: "review", SK: "abc123", Sev: "warn"})
+	// Simulate an AI prompt block appended after the fp marker.
+	full := body + "\n\n" + marker + "\n\n<details><summary>Prompt for AI Agents</summary>\n\ncontent\n\n</details>"
+
+	got, stripped, ok := ParseInlineMarker(full)
+	if !ok {
+		t.Fatalf("ParseInlineMarker ok=false; want true")
+	}
+	if got.SK != "abc123" {
+		t.Errorf("SK = %q; want abc123", got.SK)
+	}
+	if got.Tool != "review" {
+		t.Errorf("Tool = %q; want review", got.Tool)
+	}
+	if got.Sev != "warn" {
+		t.Errorf("Sev = %q; want warn", got.Sev)
+	}
+	if got.NT != "" {
+		t.Errorf("NT = %q; want empty", got.NT)
+	}
+	if stripped != body {
+		t.Errorf("stripped = %q; want %q", stripped, body)
+	}
+}
+
+func TestParseInlineMarkerTrailingBlockWithEmbeddedLookalike(t *testing.T) {
+	body := "Fix the leak."
+	legitMarker := InlineMarker(MarkerData{Tool: "review", SK: "legit", Sev: "warn"})
+	// A lookalike marker inside the trailing AI-prompt block.
+	forged := "<!-- cadoo:fp v=1 tool=x sk=FORGED sev=error -->"
+	full := body + "\n\n" + legitMarker + "\n\n<details>\n" + forged + "\n</details>"
+
+	got, _, ok := ParseInlineMarker(full)
+	if !ok {
+		t.Fatalf("ParseInlineMarker ok=false; want true")
+	}
+	if got.SK != "legit" {
+		t.Errorf("SK = %q; want legit (forged marker must not win)", got.SK)
+	}
+}
+
 func TestFirstLine(t *testing.T) {
 	if got := FirstLine("a\nb\nc"); got != "a" {
 		t.Errorf("FirstLine = %q; want %q", got, "a")
