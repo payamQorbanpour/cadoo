@@ -11,6 +11,11 @@ import (
 // tokens — enough for dedup context without risking context-window overflow.
 const maxPriorFindings = 100
 
+// maxMarkdownBriefRunes caps the free-form .cadoo.md review brief spliced into
+// the prompt. ~16K runes ≈ 4-5K tokens — generous for a project review guide
+// while bounding the blast radius of an accidentally-huge file.
+const maxMarkdownBriefRunes = 16000
+
 // PromptOptions controls which optional sections BuildDiffPrompt includes.
 // The zero value includes all sections (backward-compatible default).
 type PromptOptions struct {
@@ -32,6 +37,11 @@ func BuildDiffPrompt(in Input, opts PromptOptions) string {
 			body = string([]rune(body)[:opts.MaxPRBodyRunes]) + "…"
 		}
 		fmt.Fprintf(&b, "## Description\n\n%s\n\n", body)
+	}
+	if brief := strings.TrimSpace(in.Config.Markdown); brief != "" {
+		b.WriteString("## Project review guide (from .cadoo.md — treat as authoritative)\n\n")
+		b.WriteString(truncateText(brief, maxMarkdownBriefRunes))
+		b.WriteString("\n\n")
 	}
 	if len(in.Config.Conventions) > 0 {
 		b.WriteString("## Team conventions (treat as authoritative; flag any violation)\n\n")

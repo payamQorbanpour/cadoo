@@ -171,6 +171,12 @@ func ciCmd(args []string) {
 		fmt.Fprintf(os.Stderr, "ci: load %s: %v\n", cfgFile, err)
 		os.Exit(1)
 	}
+	// Optional sibling free-form review brief (.cadoo.md), next to the YAML.
+	mdPath := filepath.Join(filepath.Dir(cfgFile), config.MarkdownFilename)
+	if repoCfg.Markdown, err = config.LoadMarkdown(mdPath); err != nil {
+		fmt.Fprintf(os.Stderr, "ci: load %s: %v\n", mdPath, err)
+		os.Exit(1)
+	}
 
 	// Stateless dispatcher: no DB, no audit, no KB.
 	d := &orchestrator.Dispatcher{

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -48,7 +49,20 @@ type Repo struct {
 	// publishing subsystem. Loaded from the release tag's tree (never from
 	// main — consistent with the existing "config from head" rule).
 	ReleaseDocs ReleaseDocs `yaml:"releaseDocs"`
+
+	// Markdown is the raw contents of the sibling .cadoo.md file: a free-form
+	// natural-language review brief (project conventions, tone, "what we care
+	// about"). It is loaded separately from the YAML — never unmarshalled from
+	// it (hence yaml:"-") — and injected into the review prompt as authoritative
+	// context, additive to Conventions/StyleGuides/PathInstructions. Empty when
+	// no .cadoo.md is present.
+	Markdown string `yaml:"-"`
 }
+
+// MarkdownFilename is the conventional name of the sibling free-form review
+// brief that lives next to .cadoo.yaml. It is loaded from the same tree (PR
+// head SHA / release tag), consistent with the "config from head" rule.
+const MarkdownFilename = ".cadoo.md"
 
 // ReleaseDocs is the top-level release-docs configuration block in
 // .cadoo.yaml. All fields are optional; zero values disable the feature.
@@ -311,6 +325,21 @@ func LoadFile(path string) (Repo, error) {
 		return Repo{}, fmt.Errorf("read %s: %w", path, err)
 	}
 	return Parse(raw)
+}
+
+// LoadMarkdown reads the free-form review brief at path (typically the sibling
+// .cadoo.md). A missing file returns ("", nil) so callers can load it
+// unconditionally next to .cadoo.yaml. The returned string is whitespace-
+// trimmed; an all-whitespace file yields "".
+func LoadMarkdown(path string) (string, error) {
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", path, err)
+	}
+	return strings.TrimSpace(string(raw)), nil
 }
 
 // Parse decodes raw YAML bytes into Repo. Empty input returns Default().

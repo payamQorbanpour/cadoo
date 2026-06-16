@@ -109,3 +109,35 @@ func TestBuildDiffPromptPriorFindingsCapped(t *testing.T) {
 		t.Errorf("PriorFindings section missing: got 0 entries, want 100")
 	}
 }
+
+func TestBuildDiffPromptIncludesMarkdownBrief(t *testing.T) {
+	in := minInput()
+	in.Config.Markdown = "# Our review guide\n\nReject any new global variable."
+	got := tools.BuildDiffPrompt(in, tools.PromptOptions{})
+	if !strings.Contains(got, "Reject any new global variable.") {
+		t.Error("expected .cadoo.md brief to be injected into the prompt")
+	}
+	if !strings.Contains(got, ".cadoo.md") {
+		t.Error("expected a labelled section header naming .cadoo.md")
+	}
+}
+
+func TestBuildDiffPromptOmitsEmptyMarkdownBrief(t *testing.T) {
+	in := minInput()
+	got := tools.BuildDiffPrompt(in, tools.PromptOptions{})
+	if strings.Contains(got, ".cadoo.md") {
+		t.Error("no .cadoo.md section should appear when Markdown is empty")
+	}
+}
+
+func TestBuildDiffPromptMarkdownBriefTruncated(t *testing.T) {
+	in := minInput()
+	in.Config.Markdown = strings.Repeat("x", 50000)
+	got := tools.BuildDiffPrompt(in, tools.PromptOptions{})
+	if !strings.Contains(got, "…") {
+		t.Error("expected oversized .cadoo.md brief to be truncated with an ellipsis")
+	}
+	if strings.Count(got, "x") >= 50000 {
+		t.Error("oversized .cadoo.md brief was not truncated")
+	}
+}

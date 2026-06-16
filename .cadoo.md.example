@@ -1,0 +1,42 @@
+<!--
+Example .cadoo.md — drop into the root of any repo Cadoo reviews, next to
+.cadoo.yaml. This is the FREE-FORM half of Cadoo's configuration: a plain
+natural-language review brief written for the model, not a schema.
+
+Use .cadoo.yaml for structured knobs (strictness, path globs, comment policy,
+release-docs). Use this file for prose: what your team cares about, tone,
+domain context, and area-specific guidance that reads better as Markdown than
+as YAML multiline strings.
+
+Loaded from the PR head SHA (same rule as .cadoo.yaml), capped at ~16K chars,
+and injected into every review as authoritative context. It is ADDITIVE to the
+YAML `conventions:` / `style_guides:` / `path_instructions:` — both apply, so
+avoid stating contradictory rules across the two files.
+
+Delete this comment block in your real .cadoo.md.
+-->
+
+# Review guide
+
+We optimize for **correctness and clarity over cleverness**. When a finding is
+a judgment call, prefer flagging it as a nit rather than a blocking issue.
+
+## What we care about most
+
+- Error handling: every error crossing a package boundary must be wrapped with
+  context. Silently swallowed errors are always worth a comment.
+- Security: treat any change touching authn/authz, token handling, or input
+  validation as security-sensitive, even when the diff looks trivial.
+- Tests: new behavior needs a test. Bug fixes need a regression test.
+
+## Areas with extra scrutiny
+
+- `internal/auth/**` — assume an attacker is reading this code. Flag missing
+  capability checks, broadened scopes, and anything that weakens a guard.
+- `db/migrations/**` — forward-only. Call out any destructive operation
+  (DROP COLUMN, NOT NULL on a populated table without a backfill).
+
+## Tone
+
+Be direct and specific. Quote the exact line. Suggest a concrete fix rather
+than asking an open-ended question. Don't restate what the diff obviously does.
