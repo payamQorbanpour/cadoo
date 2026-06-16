@@ -64,7 +64,7 @@ type MarkerData struct {
 }
 
 var inlineMarkerRe = regexp.MustCompile(
-	`\n*<!-- cadoo:fp v=1 tool=(\S+) sk=(\S+) sev=(\S*)(?:\s+nt=(\S+))? -->`)
+	`\n+<!-- cadoo:fp v=1 tool=(\S+) sk=(\S+) sev=(\S*)(?:\s+nt=(\S+))? -->`)
 
 // InlineMarker renders the hidden marker line. It is appended only to the
 // wire copy of a comment body — never to the body used for key computation.
@@ -79,9 +79,10 @@ func InlineMarker(d MarkerData) string {
 }
 
 // ParseInlineMarker extracts the marker from a comment body. It returns the
-// parsed payload, the body with the marker (and its leading blank line)
-// removed, and whether a marker was present. The NT field is decoded from
-// base64url if present; legacy markers (without nt=) leave NT empty.
+// parsed payload, the body with the marker (and any content after it, such
+// as appended AI-prompt blocks) removed, and whether a marker was present.
+// The NT field is decoded from base64url if present; legacy markers
+// (without nt=) leave NT empty.
 func ParseInlineMarker(body string) (MarkerData, string, bool) {
 	loc := inlineMarkerRe.FindStringSubmatchIndex(body)
 	if loc == nil {
