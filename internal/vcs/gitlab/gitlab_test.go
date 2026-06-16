@@ -140,3 +140,23 @@ func TestListCadooArtifactsGitLab(t *testing.T) {
 		t.Errorf("inline = %+v; want sk=deadbeefdeadbeef tool=review file=a.go sev=warn id=disc-abc title=%q resolved=false", in, "Fix the leak.")
 	}
 }
+
+func TestAdapterBaseURL(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  Config
+		want string
+	}{
+		{"gitlab.com", Config{}, "https://gitlab.com"},
+		{"self-managed", Config{BaseURL: "https://gitlab.example.com"}, "https://gitlab.example.com"},
+		{"trailing slash stripped", Config{BaseURL: "https://gitlab.example.com/"}, "https://gitlab.example.com"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &Adapter{cfg: tc.cfg}
+			if got := a.BaseURL(); got != tc.want {
+				t.Errorf("BaseURL() = %q; want %q", got, tc.want)
+			}
+		})
+	}
+}

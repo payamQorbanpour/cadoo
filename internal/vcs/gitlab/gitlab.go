@@ -46,12 +46,12 @@ func (a *Adapter) Kind() vcs.Kind { return vcs.KindGitLab }
 
 // BaseURL returns the scheme+host of this GitLab instance with no trailing
 // slash. For GitLab.com it returns "https://gitlab.com"; for self-managed
-// instances it returns cfg.BaseURL as-is (already the scheme+host).
+// instances it strips any trailing slash from cfg.BaseURL.
 func (a *Adapter) BaseURL() string {
 	if a.cfg.BaseURL == "" {
 		return "https://gitlab.com"
 	}
-	return a.cfg.BaseURL
+	return strings.TrimRight(a.cfg.BaseURL, "/")
 }
 
 // FetchPullRequest implements vcs.Provider. The PR number is the MR IID.

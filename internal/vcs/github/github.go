@@ -97,12 +97,17 @@ func (a *Adapter) Kind() vcs.Kind {
 // slash. For GitHub.com it returns "https://github.com". For GHES,
 // cfg.BaseURL is stored as the API endpoint (e.g.
 // "https://ghe.example.com/api/v3"); this method strips the "/api/v3"
-// suffix so callers receive the raw-content host.
+// suffix (case-insensitive) so callers receive the raw-content host with no
+// trailing slash.
 func (a *Adapter) BaseURL() string {
 	if a.cfg.BaseURL == "" {
 		return "https://github.com"
 	}
-	return strings.TrimSuffix(strings.TrimRight(a.cfg.BaseURL, "/"), "/api/v3")
+	base := strings.TrimRight(a.cfg.BaseURL, "/")
+	if strings.HasSuffix(strings.ToLower(base), "/api/v3") {
+		base = base[:len(base)-len("/api/v3")]
+	}
+	return base
 }
 
 // FetchPullRequest implements vcs.Provider.
