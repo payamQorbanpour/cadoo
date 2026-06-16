@@ -38,16 +38,14 @@ func RenderReviewedSHA(sha string) string {
 // validation prevents a forged PR comment from directing DiffBetween at an
 // arbitrary object (ASVS V5 / T-08-C1).
 func ParseReviewedSHA(body string) string {
-	idx := strings.Index(body, reviewedSHAPrefix)
-	if idx < 0 {
+	_, rest, ok := strings.Cut(body, reviewedSHAPrefix)
+	if !ok {
 		return ""
 	}
-	rest := body[idx+len(reviewedSHAPrefix):]
-	end := strings.Index(rest, reviewedSHASuffix)
-	if end < 0 {
+	candidate, _, ok := strings.Cut(rest, reviewedSHASuffix)
+	if !ok {
 		return ""
 	}
-	candidate := rest[:end]
 	if !reviewedSHARe.MatchString(candidate) {
 		return ""
 	}
