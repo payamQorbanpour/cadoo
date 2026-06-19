@@ -119,55 +119,6 @@ Replaces the legacy bearer-token check with the new `scopedauth` middleware on t
 
 </blockquote>
 
-### Inline suggestion
-
-Suggestions are anchored to the exact line. The action is a one-liner; the `suggestion` block lets reviewers apply the change with a single click.
-
-````markdown
-**Suggestions:**
-- Use pinned digest instead of `latest`
-
-```suggestion
-image: ghcr.io/payamqorbanpour/cadoo-cli@sha256:abc123…
-```
-````
-
-## Architecture
-
-```
-cmd/cadoo-api       Public REST API + dashboard backend
-cmd/cadoo-webhook   VCS webhook receiver (GitHub / GHES / GitLab)
-cmd/cadoo-worker    Job consumer running review pipelines
-cmd/cadoo-cli       Local CLI for pre-commit review and admin
-cmd/cadoo-tunnel    Reverse-tunnel agent for self-hosted VCS
-
-internal/agent           Tool-calling agent loop
-internal/analysis        Sandboxed static-analysis runners
-internal/audit           Tamper-resistant audit log
-internal/auth            OIDC + SAML + RBAC
-internal/billing         Seat tracking + usage metering
-internal/config          Config loader (.cadoo.yaml + .cadoo.md + env)
-internal/contextengine   Diff fetch + PR-compression + repo index
-internal/db              pgx pool + sqlc-generated queries
-internal/findings        Fingerprinting for idempotent comments
-internal/issuetrackers   Jira + Linear adapters
-internal/jobs            In-memory queue (dev) — interface
-internal/kb              Knowledge base (pgvector)
-internal/learnings       /learn + /unlearn persistence
-internal/llm             LLM gateway (LiteLLM-compatible)
-internal/mcp             MCP client
-internal/metrics         Prometheus instrumentation
-internal/notifiers       Slack + email
-internal/orchestrator    Tool dispatcher + pipeline
-internal/releasedocs     Release artifacts (changelog, notes, blog, API docs)
-internal/reports         Run reports + dashboard data
-internal/riverq          River-backed Postgres queue (prod)
-internal/settings        Multi-tenant settings + secrets
-internal/slop            LLM output slop/spam detection
-internal/tools           /review /describe /improve /ask ...
-internal/vcs             Provider adapters (github, gitlab, ...)
-```
-
 The webhook receiver verifies signatures, parses provider-typed events, and enqueues `ToolJob{Provider, Tool, …}` rows. The worker consumes them, runs the tool against the appropriate `vcs.Provider` adapter, and posts results (summary, inline comments, check run).
 
 ## Quick start (dev)
