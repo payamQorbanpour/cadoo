@@ -86,17 +86,65 @@ func CallText(ctx context.Context, p llm.Provider, model, system, user string) (
 }
 
 // ExtractJSON finds the first {...} object in s and unmarshals it into dst.
-// Tolerates fence-wrapped or prose-prefixed responses.
+// Tolerates fence-wrapped or prose-prefixed responses, and raw control
+// characters (tabs/newlines) inside string literals — some models emit code
+// snippets with literal tabs in a "suggestion" field, which encoding/json
+// rejects per spec.
 func ExtractJSON(s string, dst any) error {
 	start := strings.IndexByte(s, '{')
 	end := strings.LastIndexByte(s, '}')
 	if start < 0 || end <= start {
 		return fmt.Errorf("no JSON object found")
 	}
-	if err := json.Unmarshal([]byte(s[start:end+1]), dst); err != nil {
+	obj := escapeControlCharsInStrings(s[start : end+1])
+	if err := json.Unmarshal([]byte(obj), dst); err != nil {
 		return fmt.Errorf("parse json: %w", err)
 	}
 	return nil
+}
+
+// escapeControlCharsInStrings rewrites raw control characters (< 0x20) that
+// appear inside JSON string literals into their valid escape sequences, so a
+// response containing e.g. a literal tab inside a value parses cleanly.
+// Control characters outside strings (structural whitespace) are left as-is.
+func escapeControlCharsInStrings(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	inString := false
+	escaped := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if inString {
+			switch {
+			case escaped:
+				escaped = false
+			case c == '\\':
+				escaped = true
+			case c == '"':
+				inString = false
+			case c < 0x20:
+				switch c {
+				case '\t':
+					b.WriteString(`\t`)
+				case '\n':
+					b.WriteString(`\n`)
+				case '\r':
+					b.WriteString(`\r`)
+				case '\f':
+					b.WriteString(`\f`)
+				case '\b':
+					b.WriteString(`\b`)
+				default:
+					fmt.Fprintf(&b, `\u%04x`, c)
+				}
+				continue
+			}
+		} else if c == '"' {
+			inString = true
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
 }
 
 func truncate(s string, n int) string {
