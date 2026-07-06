@@ -90,6 +90,38 @@ func TestCallJSONSuccessUnchanged(t *testing.T) {
 	}
 }
 
+func TestExtractJSONToleratesRawControlCharsInStrings(t *testing.T) {
+	// Gemini-style: fenced JSON whose "suggestion" holds Go code with literal
+	// tabs and newlines — invalid per JSON spec, but must not fail the parse.
+	raw := "```json\n{\n  \"summary\": \"fix it\",\n  \"suggestion\": \"func x() {\n\tfoo()\n}\"\n}\n```"
+	var dst struct {
+		Summary    string `json:"summary"`
+		Suggestion string `json:"suggestion"`
+	}
+	if err := ExtractJSON(raw, &dst); err != nil {
+		t.Fatalf("ExtractJSON should tolerate raw control chars in strings, got: %v", err)
+	}
+	if dst.Summary != "fix it" {
+		t.Errorf("summary = %q; want %q", dst.Summary, "fix it")
+	}
+	if !strings.Contains(dst.Suggestion, "\tfoo()") {
+		t.Errorf("suggestion = %q; want the literal tab preserved as a real tab after decode", dst.Suggestion)
+	}
+}
+
+func TestExtractJSONEscapedSequencesUnchanged(t *testing.T) {
+	// A properly-escaped \t must still decode to a single tab (not doubled).
+	var dst struct {
+		V string `json:"v"`
+	}
+	if err := ExtractJSON(`{"v":"a\tb"}`, &dst); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if dst.V != "a\tb" {
+		t.Errorf("v = %q; want %q (escape must not be double-processed)", dst.V, "a\tb")
+	}
+}
+
 func TestMaxTokensDefaultAndEnv(t *testing.T) {
 	t.Setenv("CADOO_MAX_TOKENS", "")
 	if got := maxTokens(); got != defaultMaxTokens {
