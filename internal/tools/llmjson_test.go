@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -41,6 +42,38 @@ func TestCallJSONEmptyCompletionIsExplicit(t *testing.T) {
 	}
 	if strings.Contains(msg, "no JSON object found") {
 		t.Errorf("error %q must not be the cryptic parser message", msg)
+	}
+}
+
+func TestCallJSONEmptyCompletionIsSentinel(t *testing.T) {
+	p := &fakeProvider{resp: llm.ChatResponse{Content: "", FinishReason: "stop"}}
+	var dst map[string]any
+	err := CallJSON(context.Background(), p, "m", "sys", "user", &dst)
+	if !errors.Is(err, ErrEmptyCompletion) {
+		t.Fatalf("empty completion should be ErrEmptyCompletion so callers can treat it as non-fatal; got %v", err)
+	}
+	// finish_reason must still be reported for diagnosability.
+	if !strings.Contains(err.Error(), "stop") {
+		t.Errorf("error %q should still include the finish_reason", err.Error())
+	}
+}
+
+func TestCallTextEmptyCompletionIsSentinel(t *testing.T) {
+	p := &fakeProvider{resp: llm.ChatResponse{Content: "  ", FinishReason: "stop"}}
+	_, err := CallText(context.Background(), p, "m", "sys", "user")
+	if !errors.Is(err, ErrEmptyCompletion) {
+		t.Fatalf("empty/whitespace completion should be ErrEmptyCompletion; got %v", err)
+	}
+}
+
+func TestTruncationIsNotEmptyCompletionSentinel(t *testing.T) {
+	// A length-truncated completion is a distinct, still-fatal condition and
+	// must NOT be mistaken for the non-fatal empty-completion sentinel.
+	p := &fakeProvider{resp: llm.ChatResponse{Content: "partial", FinishReason: "length"}}
+	var dst map[string]any
+	err := CallJSON(context.Background(), p, "m", "sys", "user", &dst)
+	if errors.Is(err, ErrEmptyCompletion) {
+		t.Errorf("truncation error %v must not match ErrEmptyCompletion", err)
 	}
 }
 

@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -10,6 +11,15 @@ import (
 
 	"github.com/payamqorbanpour/cadoo/internal/llm"
 )
+
+// ErrEmptyCompletion is returned by CallJSON/CallText when the gateway yields a
+// completion with no content and a finish_reason other than "length" (typically
+// "stop" — the model finished cleanly but produced nothing). It is a distinct,
+// recoverable condition: callers that don't require output (e.g. advisory tools
+// running in CI) may treat it as a no-op via errors.Is rather than a hard
+// failure. Truncation (finish_reason=length) and transport errors are NOT this
+// sentinel and remain fatal.
+var ErrEmptyCompletion = errors.New("llm: empty completion — gateway returned no content")
 
 // defaultMaxTokens is the completion-token budget for tool LLM calls. The
 // previous hardcoded 4096 truncated /describe's JSON on real merge requests
@@ -48,7 +58,7 @@ func CallJSON(ctx context.Context, p llm.Provider, model, system, user string, d
 		return fmt.Errorf("llm call: %w", err)
 	}
 	if resp.Content == "" {
-		return fmt.Errorf("llm: empty completion (finish_reason=%q) — gateway returned no content", resp.FinishReason)
+		return fmt.Errorf("%w (finish_reason=%q)", ErrEmptyCompletion, resp.FinishReason)
 	}
 	if resp.FinishReason == "length" {
 		return fmt.Errorf("llm: completion truncated at max_tokens (finish_reason=length, %d chars) — raise CADOO_MAX_TOKENS", len(resp.Content))
@@ -77,7 +87,7 @@ func CallText(ctx context.Context, p llm.Provider, model, system, user string) (
 	}
 	trimmed := strings.TrimSpace(resp.Content)
 	if trimmed == "" {
-		return "", fmt.Errorf("llm: empty completion (finish_reason=%q) — gateway returned no content", resp.FinishReason)
+		return "", fmt.Errorf("%w (finish_reason=%q)", ErrEmptyCompletion, resp.FinishReason)
 	}
 	if resp.FinishReason == "length" {
 		return "", fmt.Errorf("llm: completion truncated at max_tokens (finish_reason=length, %d chars) — raise CADOO_MAX_TOKENS", len(resp.Content))

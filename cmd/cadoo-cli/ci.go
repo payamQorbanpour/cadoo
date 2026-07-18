@@ -8,6 +8,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -24,6 +25,7 @@ import (
 	"github.com/payamqorbanpour/cadoo/internal/findings"
 	"github.com/payamqorbanpour/cadoo/internal/llm/litellm"
 	"github.com/payamqorbanpour/cadoo/internal/orchestrator"
+	"github.com/payamqorbanpour/cadoo/internal/tools"
 	"github.com/payamqorbanpour/cadoo/internal/vcs"
 	cadoogh "github.com/payamqorbanpour/cadoo/internal/vcs/github"
 	cadoogl "github.com/payamqorbanpour/cadoo/internal/vcs/gitlab"
@@ -234,6 +236,15 @@ func ciCmd(args []string) {
 				Trigger:      "ci",
 			}
 			if err := d.Run(gctx, job); err != nil {
+				// An empty LLM completion (finish_reason=stop, no content) is a
+				// valid "nothing to add" outcome for advisory tools — the model
+				// finished cleanly. Log it, but don't fail the CI job: a red
+				// pipeline should mean a real error (auth, transport, truncation),
+				// not an empty suggestion set.
+				if errors.Is(err, tools.ErrEmptyCompletion) {
+					fmt.Fprintf(os.Stderr, "ci: %s produced no output (%v); continuing\n", name, err)
+					return nil
+				}
 				fmt.Fprintf(os.Stderr, "ci: %s failed: %v\n", name, err)
 				firstErrMu.Lock()
 				if firstErr == nil {
