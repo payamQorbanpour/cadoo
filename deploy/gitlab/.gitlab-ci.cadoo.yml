@@ -21,6 +21,13 @@
 # Optional:
 #   CADOO_TOOLS           Comma-separated tools to run. Defaults to
 #                         "describe,review,improve".
+#   LLM_GATEWAY_TIMEOUT_SECONDS
+#                         Per-request timeout for the LLM gateway call.
+#                         Defaults to 120s; raise this (and the LiteLLM
+#                         proxy's own `request_timeout`, if self-hosted) if
+#                         a tool fails with "context deadline exceeded
+#                         (Client.Timeout exceeded while awaiting headers)"
+#                         on large diffs.
 
 cadoo-review:
   stage: test

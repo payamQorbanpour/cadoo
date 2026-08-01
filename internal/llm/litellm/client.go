@@ -9,11 +9,16 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/payamqorbanpour/cadoo/internal/llm"
 )
+
+// defaultTimeout is used when LLM_GATEWAY_TIMEOUT_SECONDS is unset or invalid.
+const defaultTimeout = 120 * time.Second
 
 // Client is an OpenAI-compatible chat-completion client.
 type Client struct {
@@ -26,12 +31,28 @@ type Client struct {
 // version prefix (e.g. "http://litellm:4000/v1"). apiKey is used verbatim as the
 // Authorization header value (e.g. "Bearer sk-...", "apikey 1234...1234"); the
 // client does not add a scheme prefix.
+//
+// The per-request timeout defaults to 120s and can be overridden with the
+// LLM_GATEWAY_TIMEOUT_SECONDS env var — useful for tools like improve that can
+// exceed the default on large diffs or slower models.
 func New(baseURL, apiKey string) *Client {
 	return &Client{
 		BaseURL:    strings.TrimRight(baseURL, "/"),
 		APIKey:     apiKey,
-		HTTPClient: &http.Client{Timeout: 120 * time.Second},
+		HTTPClient: &http.Client{Timeout: timeoutFromEnv()},
 	}
+}
+
+func timeoutFromEnv() time.Duration {
+	v := os.Getenv("LLM_GATEWAY_TIMEOUT_SECONDS")
+	if v == "" {
+		return defaultTimeout
+	}
+	secs, err := strconv.Atoi(v)
+	if err != nil || secs <= 0 {
+		return defaultTimeout
+	}
+	return time.Duration(secs) * time.Second
 }
 
 type chatRequestPayload struct {

@@ -26,6 +26,9 @@ model_list:
 
 litellm_settings:
   drop_params: true
+  # Keep in sync with (or above) LLM_GATEWAY_TIMEOUT_SECONDS on the Go side
+  # (internal/llm/litellm/client.go) — if this is lower, the proxy errors out
+  # before the Go client's own timeout ever gets a chance to matter.
   request_timeout: 120
 
 general_settings:
