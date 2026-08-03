@@ -355,9 +355,12 @@ func (d *Dispatcher) applyResult(ctx context.Context, provider vcs.Provider, pr 
 	if res.Summary != "" {
 		d.postSummary(ctx, provider, pr, key, tool, res.Summary)
 	}
-	if len(res.InlineComments) > 0 {
-		d.postInline(ctx, provider, pr, key, tool, res.InlineComments, changeSet, incrementalRun)
-	}
+	// Always call postInline, even with zero new comments: resolveStalePriors
+	// lives at the end of postInline, and a push that fixes the last
+	// remaining finding produces exactly zero new inline comments. Gating
+	// this call on len(res.InlineComments) > 0 would skip auto-resolve for
+	// that case — postInline already handles an empty comments slice fine.
+	d.postInline(ctx, provider, pr, key, tool, res.InlineComments, changeSet, incrementalRun)
 	if d.ReportStatus {
 		if res.CheckRun != nil {
 			if err := provider.UpsertCheckRun(ctx, pr, *res.CheckRun); err != nil {

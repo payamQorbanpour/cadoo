@@ -314,6 +314,45 @@ func TestPostInlineResolvesStalePriors(t *testing.T) {
 	}
 }
 
+// TestApplyResultResolvesStalePriorsWhenRunProducesNoInlineComments covers
+// the real-world trigger for "fixed the finding, pushed, thread never
+// resolved": a push that fixes the *last* remaining finding makes the tool
+// return zero new inline comments. applyResult only called postInline (and
+// therefore resolveStalePriors, which lives inside it) when
+// res.InlineComments was non-empty, so this exact scenario silently skipped
+// auto-resolve. TestPostInlineResolvesStalePriors exercises postInline
+// directly and never surfaces this, because every run in that test still has
+// at least one surviving finding.
+func TestApplyResultResolvesStalePriorsWhenRunProducesNoInlineComments(t *testing.T) {
+	ctx := context.Background()
+	fv := &idVCS{fakeVCS: fakeVCS{
+		kind: vcs.KindGitLab,
+		pr:   &vcs.PullRequest{RepoFullName: "g/p", Number: 1, HeadSHA: "abc"},
+	}}
+	d := &Dispatcher{
+		VCSPool: map[vcs.Kind]vcs.Provider{vcs.KindGitLab: &fv.fakeVCS},
+		Posted:  findings.NewMemory(""),
+	}
+	pr := fv.pr
+
+	// Run 1: one finding gets posted and recorded with a real external ID.
+	first := []vcs.InlineComment{
+		{File: "a.go", LineStart: 1, Severity: "warn", Body: "The only finding"},
+	}
+	if err := d.applyResult(ctx, fv, pr, "review", &tools.Result{InlineComments: first}, nil, false); err != nil {
+		t.Fatalf("run 1: %v", err)
+	}
+
+	// Run 2: the fix landed — the tool has nothing left to flag.
+	if err := d.applyResult(ctx, fv, pr, "review", &tools.Result{Summary: "LGTM"}, nil, false); err != nil {
+		t.Fatalf("run 2: %v", err)
+	}
+
+	if len(fv.resolved) != 1 {
+		t.Fatalf("expected the fixed finding's thread to be resolved, got %d resolved: %v", len(fv.resolved), fv.resolved)
+	}
+}
+
 // captureVCS records exactly what bodies were sent over the wire and hands
 // back per-comment external IDs (like the real GitLab adapter).
 type captureVCS struct {
